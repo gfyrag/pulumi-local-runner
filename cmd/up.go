@@ -20,7 +20,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			return engine.Run(cmd.Context(), cfg, targets, engine.OpUp)
+			return engine.Run(cmd.Context(), cfg, targets, engine.OpUp, runOptions())
 		},
 	})
 }

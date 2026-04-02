@@ -8,7 +8,6 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gfyrag/plr/internal/config"
-	"github.com/gfyrag/plr/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -168,19 +167,17 @@ func init() {
 				return err
 			}
 
-			// Copy Pulumi config file if it exists
-			srcDir, err := git.WorkDir(srcApp)
+			// Copy Pulumi config file from config store if it exists
+			srcPath, err := config.StackConfigPath(srcApp.Name, srcStack.Name)
 			if err != nil {
 				return err
 			}
-			srcPath := filepath.Join(srcDir, fmt.Sprintf("Pulumi.%s.yaml", srcStack.Name))
 
 			if data, err := os.ReadFile(srcPath); err == nil {
-				dstDir, err := git.WorkDir(dstApp)
+				dstPath, err := config.StackConfigPath(dstApp.Name, dstParts[1])
 				if err != nil {
 					return err
 				}
-				dstPath := filepath.Join(dstDir, fmt.Sprintf("Pulumi.%s.yaml", dstParts[1]))
 				if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 					return err
 				}

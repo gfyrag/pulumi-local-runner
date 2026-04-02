@@ -1,6 +1,7 @@
 package git
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -50,6 +51,12 @@ func Sync(app *config.App, stack *config.Stack) error {
 	if err := checkout(repoDir, stack); err != nil {
 		return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
 	}
+
+	// Restore stack config from plr config store into workdir
+	if err := restoreStackConfig(app, stack); err != nil {
+		return fmt.Errorf("restoring stack config: %w", err)
+	}
+
 	return nil
 }
 
@@ -77,6 +84,70 @@ func checkout(repoDir string, stack *config.Stack) error {
 		target = "origin/" + ref
 	}
 
+	// Reset any local modifications (e.g. Pulumi config files from previous runs)
+	// so that checkout succeeds cleanly.
+	if err := runGit("-C", repoDir, "checkout", "--", "."); err != nil {
+		return fmt.Errorf("cleaning workdir: %w", err)
+	}
+
 	ui.Step("Checking out %s...", ref)
 	return runGit("-C", repoDir, "checkout", "--detach", target)
+}
+
+// restoreStackConfig copies the stack config from the plr config store into the workdir.
+// If no stored config exists, this is a no-op.
+func restoreStackConfig(app *config.App, stack *config.Stack) error {
+	storePath, err := config.StackConfigPath(app.Name, stack.Name)
+	if err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(storePath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	workDir, err := WorkDir(app)
+	if err != nil {
+		return err
+	}
+
+	dest := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
+	return os.WriteFile(dest, data, 0o644)
+}
+
+// SaveStackConfig copies the stack config from the workdir back to the plr config store.
+func SaveStackConfig(app *config.App, stack *config.Stack) error {
+	workDir, err := WorkDir(app)
+	if err != nil {
+		return err
+	}
+
+	src := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
+	data, err := os.ReadFile(src)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
+
+	storePath, err := config.StackConfigPath(app.Name, stack.Name)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(storePath, data, 0o644)
+}
+
+// StackConfigStorePath returns the config store path for a stack.
+func StackConfigStorePath(app *config.App, stack *config.Stack) (string, error) {
+	return config.StackConfigPath(app.Name, stack.Name)
 }

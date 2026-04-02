@@ -33,17 +33,16 @@ func init() {
 				return err
 			}
 
-			workDir, err := git.WorkDir(app)
+			s, err := getStackWithConfig(cmd, app, stack)
 			if err != nil {
 				return err
 			}
 
-			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
-			if err != nil {
+			if err := pulumibridge.SetConfig(cmd.Context(), s, args[1], args[2], setSecret); err != nil {
 				return err
 			}
 
-			return pulumibridge.SetConfig(cmd.Context(), s, args[1], args[2], setSecret)
+			return git.SaveStackConfig(app, stack)
 		},
 	}
 	setCmd.Flags().BoolVar(&setSecret, "secret", false, "Mark the value as secret")
@@ -60,12 +59,7 @@ func init() {
 				return err
 			}
 
-			workDir, err := git.WorkDir(app)
-			if err != nil {
-				return err
-			}
-
-			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
+			s, err := getStackWithConfig(cmd, app, stack)
 			if err != nil {
 				return err
 			}
@@ -95,12 +89,7 @@ func init() {
 				return err
 			}
 
-			workDir, err := git.WorkDir(app)
-			if err != nil {
-				return err
-			}
-
-			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
+			s, err := getStackWithConfig(cmd, app, stack)
 			if err != nil {
 				return err
 			}
@@ -121,7 +110,7 @@ func init() {
 		},
 	})
 
-	// config import
+	// config import — writes directly to config store
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "import <app/stack> <path-to-Pulumi.stack.yaml>",
 		Short: "Import a Pulumi stack config file",
@@ -138,26 +127,23 @@ func init() {
 				return fmt.Errorf("reading %s: %w", srcPath, err)
 			}
 
-			workDir, err := git.WorkDir(app)
+			storePath, err := config.StackConfigPath(app.Name, stack.Name)
 			if err != nil {
 				return err
 			}
-
-			destPath := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
-			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
 				return err
 			}
-
-			if err := os.WriteFile(destPath, data, 0o644); err != nil {
-				return fmt.Errorf("writing %s: %w", destPath, err)
+			if err := os.WriteFile(storePath, data, 0o644); err != nil {
+				return fmt.Errorf("writing %s: %w", storePath, err)
 			}
 
-			fmt.Printf("Imported config to %s\n", destPath)
+			fmt.Printf("Imported config to %s\n", storePath)
 			return nil
 		},
 	})
 
-	// config edit
+	// config edit — edits the config store file directly
 	configCmd.AddCommand(&cobra.Command{
 		Use:   "edit <app/stack>",
 		Short: "Open the stack config file in your editor",
@@ -168,19 +154,20 @@ func init() {
 				return err
 			}
 
-			workDir, err := git.WorkDir(app)
+			storePath, err := config.StackConfigPath(app.Name, stack.Name)
 			if err != nil {
 				return err
 			}
-
-			configFile := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
+			if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
+				return err
+			}
 
 			editor := os.Getenv("EDITOR")
 			if editor == "" {
 				editor = "vi"
 			}
 
-			c := exec.Command(editor, configFile)
+			c := exec.Command(editor, storePath)
 			c.Stdin = os.Stdin
 			c.Stdout = os.Stdout
 			c.Stderr = os.Stderr
@@ -199,19 +186,40 @@ func init() {
 				return err
 			}
 
-			workDir, err := git.WorkDir(app)
+			s, err := getStackWithConfig(cmd, app, stack)
 			if err != nil {
 				return err
 			}
 
-			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
-			if err != nil {
+			if err := pulumibridge.RemoveConfig(cmd.Context(), s, args[1]); err != nil {
 				return err
 			}
 
-			return pulumibridge.RemoveConfig(cmd.Context(), s, args[1])
+			return git.SaveStackConfig(app, stack)
 		},
 	})
+}
+
+// getStackWithConfig restores the config into workdir, then returns the Pulumi stack.
+func getStackWithConfig(cmd *cobra.Command, app *config.App, stack *config.Stack) (pulumibridge.Stack, error) {
+	workDir, err := git.WorkDir(app)
+	if err != nil {
+		return pulumibridge.Stack{}, err
+	}
+
+	// Restore config from store to workdir before accessing via Automation API
+	storePath, err := config.StackConfigPath(app.Name, stack.Name)
+	if err != nil {
+		return pulumibridge.Stack{}, err
+	}
+	if data, readErr := os.ReadFile(storePath); readErr == nil {
+		dest := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
+		if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
+			return pulumibridge.Stack{}, fmt.Errorf("restoring config to workdir: %w", writeErr)
+		}
+	}
+
+	return pulumibridge.GetStack(cmd.Context(), stack, workDir)
 }
 
 func resolveAppStack(target string) (*config.App, *config.Stack, error) {

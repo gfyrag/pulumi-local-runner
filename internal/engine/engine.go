@@ -91,8 +91,14 @@ func ResolveTargets(cfg *config.Config, args []string) ([]Target, error) {
 	return targets, nil
 }
 
+// RunOptions holds runtime options for a Pulumi operation.
+type RunOptions struct {
+	Verbose       bool
+	ConfigOverrides map[string]string // key=value pairs applied before the run, removed after
+}
+
 // Run executes the given operation on the resolved targets, respecting dependency order.
-func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation) error {
+func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation, opts RunOptions) error {
 	if len(targets) == 0 {
 		ui.Warn("No targets to run.")
 		return nil
@@ -107,7 +113,7 @@ func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation
 	failed := 0
 	var errs []string
 	for _, t := range ordered {
-		if err := runOne(ctx, t, op); err != nil {
+		if err := runOne(ctx, t, op, opts); err != nil {
 			failed++
 			errs = append(errs, fmt.Sprintf("%s: %s", t.Key(), err))
 			ui.ResultFail(t.Key(), err.Error())
@@ -125,7 +131,7 @@ func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation
 	return nil
 }
 
-func runOne(ctx context.Context, t Target, op Operation) error {
+func runOne(ctx context.Context, t Target, op Operation, opts RunOptions) error {
 	ui.Header(t.Key(), op.String())
 
 	if err := git.Sync(t.App, t.Stack); err != nil {
@@ -146,18 +152,33 @@ func runOne(ctx context.Context, t Target, op Operation) error {
 		return fmt.Errorf("getting stack: %w", err)
 	}
 
+	// Apply config overrides
+	for k, v := range opts.ConfigOverrides {
+		if err := pulumibridge.SetConfig(ctx, stack, k, v, false); err != nil {
+			return fmt.Errorf("setting config override %q: %w", k, err)
+		}
+	}
+
+	var pulumiErr error
 	switch op {
 	case OpUp:
-		return pulumibridge.Up(ctx, stack)
+		pulumiErr = pulumibridge.Up(ctx, stack, opts.Verbose)
 	case OpPreview:
-		return pulumibridge.Preview(ctx, stack)
+		pulumiErr = pulumibridge.Preview(ctx, stack, opts.Verbose)
 	case OpDestroy:
-		return pulumibridge.Destroy(ctx, stack)
+		pulumiErr = pulumibridge.Destroy(ctx, stack, opts.Verbose)
 	case OpRefresh:
-		return pulumibridge.Refresh(ctx, stack)
+		pulumiErr = pulumibridge.Refresh(ctx, stack, opts.Verbose)
 	default:
 		return fmt.Errorf("unknown operation: %s", op)
 	}
+
+	// Save stack config back to config store (captures newly set secrets, etc.)
+	if err := git.SaveStackConfig(t.App, t.Stack); err != nil {
+		ui.Warn("Failed to save stack config: %s", err)
+	}
+
+	return pulumiErr
 }
 
 // topoSort orders targets respecting dependsOn. Simple Kahn's algorithm.

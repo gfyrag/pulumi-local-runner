@@ -16,8 +16,9 @@ plr is a thin orchestration layer that:
 2. **Checks out** the right branch or tag for each stack
 3. **Runs** Pulumi operations (`up`, `preview`, `destroy`, `refresh`) via the [Automation API](https://www.pulumi.com/docs/using-pulumi/automation-api/)
 4. **Respects dependency order** between stacks
+5. **Stores stack configs separately** from git sources, so checkouts never conflict with your config
 
-All configuration lives in a single file (`~/.config/plr/config.yaml`), so you can operate on any stack from any directory.
+All configuration lives in `~/.config/plr/`, so you can operate on any stack from any directory.
 
 ## Install
 
@@ -46,14 +47,23 @@ plr stack add networking prod --ref v1.2.0 --org myorg
 plr app add kubernetes --repo git@github.com:org/infra-k8s.git
 plr stack add kubernetes dev --branch main --org myorg --depends-on networking/dev
 
+# Import an existing Pulumi stack config file
+plr config import networking/dev /path/to/Pulumi.dev.yaml
+
 # Preview everything
 plr preview
 
 # Target a specific stack
 plr up networking/dev
 
-# Import an existing Pulumi stack config file
-plr config import networking/dev /path/to/Pulumi.dev.yaml
+# Full Pulumi output (verbose mode)
+plr up -v networking/dev
+
+# Copy a stack (config entry + Pulumi config file)
+plr stack cp networking/dev networking/staging
+
+# Edit the stack config in your editor
+plr config edit networking/dev
 ```
 
 ## Commands
@@ -71,20 +81,33 @@ plr config import networking/dev /path/to/Pulumi.dev.yaml
 | `plr stack add <app> <name>` | Add a stack to an app |
 | `plr stack list [app]` | List stacks |
 | `plr stack remove <app/stack>` | Remove a stack |
+| `plr stack cp <src> <dst>` | Copy a stack (config entry + Pulumi config) |
 | `plr config set <app/stack> <key> <value>` | Set a Pulumi config value |
 | `plr config get <app/stack> <key>` | Get a config value |
 | `plr config list <app/stack>` | List all config values |
+| `plr config edit <app/stack>` | Open the stack config in `$EDITOR` |
 | `plr config import <app/stack> <file>` | Import a `Pulumi.<stack>.yaml` file |
 | `plr config rm <app/stack> <key>` | Remove a config value |
 
 Targets can be `app` (all stacks) or `app/stack` (specific stack). No target means everything.
+
+### Global flags
+
+| Flag | Description |
+|---|---|
+| `-v`, `--verbose` | Show full Pulumi output (raw progress streams) |
+
+By default, plr shows a compact summary of resource operations. Use `-v` for the full Pulumi CLI-style output (useful for debugging Docker builds, etc.).
 
 ## Configuration
 
 plr follows the XDG convention:
 
 - **Config**: `~/.config/plr/config.yaml`
+- **Stack configs**: `~/.config/plr/stacks/<app>/Pulumi.<stack>.yaml`
 - **Repo cache**: `~/.cache/plr/repos/`
+
+Stack config files (`Pulumi.<stack>.yaml`) are stored **outside** the git repo cache. This means `plr sync` can freely fetch and checkout branches without conflicting with your local config changes or encrypted secrets.
 
 ```yaml
 apps:
@@ -129,10 +152,12 @@ plr up networking/dev
 ```
 
 1. Fetches `git@github.com:org/infra-networking.git` into `~/.cache/plr/repos/networking/`
-2. Checks out `origin/main` (detached HEAD)
-3. Resolves the fully qualified stack name: `myorg/infra-networking/dev`
-4. Calls `auto.UpsertStackLocalSource()` pointing at `deployment/pulumi/`
-5. Runs `stack.Up()` with output streamed to your terminal
+2. Resets any local changes, then checks out `origin/main` (detached HEAD)
+3. Copies `Pulumi.dev.yaml` from the config store into the working directory
+4. Resolves the fully qualified stack name: `myorg/infra-networking/dev`
+5. Calls `auto.UpsertStackLocalSource()` pointing at `deployment/pulumi/`
+6. Runs `stack.Up()` and displays a compact resource summary
+7. Saves the (possibly updated) `Pulumi.dev.yaml` back to the config store
 
 When multiple stacks are targeted, plr topologically sorts them by `dependsOn` and runs them in order.
 

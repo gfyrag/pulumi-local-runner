@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optrefresh"
@@ -16,6 +17,9 @@ import (
 	"github.com/gfyrag/plr/internal/config"
 	"github.com/gfyrag/plr/internal/ui"
 )
+
+// Stack is an alias for auto.Stack to avoid leaking the auto package in callers.
+type Stack = auto.Stack
 
 type pulumiProject struct {
 	Name string `yaml:"name"`
@@ -61,40 +65,68 @@ func GetStack(ctx context.Context, stack *config.Stack, workDir string) (auto.St
 	return s, nil
 }
 
-func Up(ctx context.Context, stack auto.Stack) error {
+func Up(ctx context.Context, stack auto.Stack, verbose bool) error {
 	ui.Info("Running pulumi up...")
-	_, err := stack.Up(ctx,
-		optup.ProgressStreams(os.Stdout),
-		optup.ErrorProgressStreams(os.Stderr),
-	)
+	if verbose {
+		_, err := stack.Up(ctx,
+			optup.ProgressStreams(os.Stdout),
+			optup.ErrorProgressStreams(os.Stderr),
+		)
+		return err
+	}
+	ch := make(chan events.EngineEvent)
+	wg := streamEvents(ch)
+	_, err := stack.Up(ctx, optup.EventStreams(ch))
+	wg.Wait()
 	return err
 }
 
-func Preview(ctx context.Context, stack auto.Stack) error {
+func Preview(ctx context.Context, stack auto.Stack, verbose bool) error {
 	ui.Info("Running pulumi preview...")
-	_, err := stack.Preview(ctx,
-		optpreview.ProgressStreams(os.Stdout),
-		optpreview.ErrorProgressStreams(os.Stderr),
-		optpreview.Diff(),
-	)
+	if verbose {
+		_, err := stack.Preview(ctx,
+			optpreview.ProgressStreams(os.Stdout),
+			optpreview.ErrorProgressStreams(os.Stderr),
+			optpreview.Diff(),
+		)
+		return err
+	}
+	ch := make(chan events.EngineEvent)
+	wg := streamEvents(ch)
+	_, err := stack.Preview(ctx, optpreview.EventStreams(ch), optpreview.Diff())
+	wg.Wait()
 	return err
 }
 
-func Destroy(ctx context.Context, stack auto.Stack) error {
+func Destroy(ctx context.Context, stack auto.Stack, verbose bool) error {
 	ui.Info("Running pulumi destroy...")
-	_, err := stack.Destroy(ctx,
-		optdestroy.ProgressStreams(os.Stdout),
-		optdestroy.ErrorProgressStreams(os.Stderr),
-	)
+	if verbose {
+		_, err := stack.Destroy(ctx,
+			optdestroy.ProgressStreams(os.Stdout),
+			optdestroy.ErrorProgressStreams(os.Stderr),
+		)
+		return err
+	}
+	ch := make(chan events.EngineEvent)
+	wg := streamEvents(ch)
+	_, err := stack.Destroy(ctx, optdestroy.EventStreams(ch))
+	wg.Wait()
 	return err
 }
 
-func Refresh(ctx context.Context, stack auto.Stack) error {
+func Refresh(ctx context.Context, stack auto.Stack, verbose bool) error {
 	ui.Info("Running pulumi refresh...")
-	_, err := stack.Refresh(ctx,
-		optrefresh.ProgressStreams(os.Stdout),
-		optrefresh.ErrorProgressStreams(os.Stderr),
-	)
+	if verbose {
+		_, err := stack.Refresh(ctx,
+			optrefresh.ProgressStreams(os.Stdout),
+			optrefresh.ErrorProgressStreams(os.Stderr),
+		)
+		return err
+	}
+	ch := make(chan events.EngineEvent)
+	wg := streamEvents(ch)
+	_, err := stack.Refresh(ctx, optrefresh.EventStreams(ch))
+	wg.Wait()
 	return err
 }
 

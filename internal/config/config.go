@@ -59,6 +59,16 @@ func ConfigPath() (string, error) {
 	return filepath.Join(dir, "config.yaml"), nil
 }
 
+// StackConfigPath returns the path where a stack's Pulumi config is stored.
+// This is outside the git repo to avoid checkout conflicts.
+func StackConfigPath(appName, stackName string) (string, error) {
+	dir, err := ConfigDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "stacks", appName, fmt.Sprintf("Pulumi.%s.yaml", stackName)), nil
+}
+
 func Load() (*Config, error) {
 	path, err := ConfigPath()
 	if err != nil {
