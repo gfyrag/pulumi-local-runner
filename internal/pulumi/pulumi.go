@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
@@ -17,6 +18,19 @@ import (
 	"github.com/gfyrag/plr/internal/config"
 	"github.com/gfyrag/plr/internal/ui"
 )
+
+// compactError strips the verbose stdout/stderr dump from Pulumi autoError
+// messages, since event streaming already displayed diagnostics to the user.
+func compactError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if idx := strings.Index(msg, "\ncode: "); idx >= 0 {
+		return fmt.Errorf("%s", msg[:idx])
+	}
+	return err
+}
 
 // Stack is an alias for auto.Stack to avoid leaking the auto package in callers.
 type Stack = auto.Stack
@@ -78,7 +92,7 @@ func Up(ctx context.Context, stack auto.Stack, verbose bool) error {
 	wg := streamEvents(ch)
 	_, err := stack.Up(ctx, optup.EventStreams(ch))
 	wg.Wait()
-	return err
+	return compactError(err)
 }
 
 func Preview(ctx context.Context, stack auto.Stack, verbose bool) error {
@@ -95,7 +109,7 @@ func Preview(ctx context.Context, stack auto.Stack, verbose bool) error {
 	wg := streamEvents(ch)
 	_, err := stack.Preview(ctx, optpreview.EventStreams(ch), optpreview.Diff())
 	wg.Wait()
-	return err
+	return compactError(err)
 }
 
 func Destroy(ctx context.Context, stack auto.Stack, verbose bool) error {
@@ -111,7 +125,7 @@ func Destroy(ctx context.Context, stack auto.Stack, verbose bool) error {
 	wg := streamEvents(ch)
 	_, err := stack.Destroy(ctx, optdestroy.EventStreams(ch))
 	wg.Wait()
-	return err
+	return compactError(err)
 }
 
 func Refresh(ctx context.Context, stack auto.Stack, verbose bool) error {
@@ -127,7 +141,7 @@ func Refresh(ctx context.Context, stack auto.Stack, verbose bool) error {
 	wg := streamEvents(ch)
 	_, err := stack.Refresh(ctx, optrefresh.EventStreams(ch))
 	wg.Wait()
-	return err
+	return compactError(err)
 }
 
 func SetConfig(ctx context.Context, stack auto.Stack, key, value string, secret bool) error {

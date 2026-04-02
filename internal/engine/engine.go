@@ -159,6 +159,21 @@ func runOne(ctx context.Context, t Target, op Operation, opts RunOptions) error 
 		}
 	}
 
+	// Cancel the Pulumi operation if the context is interrupted (ctrl-c),
+	// so the stack lock is released and no pending operation is left behind.
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-done:
+		case <-ctx.Done():
+			ui.Warn("Interrupted, cancelling Pulumi operation...")
+			// Use a background context since the original is already cancelled.
+			if cancelErr := stack.Cancel(context.Background()); cancelErr != nil {
+				ui.Warn("Cancel failed: %s", cancelErr)
+			}
+		}
+	}()
+
 	var pulumiErr error
 	switch op {
 	case OpUp:
@@ -170,8 +185,10 @@ func runOne(ctx context.Context, t Target, op Operation, opts RunOptions) error 
 	case OpRefresh:
 		pulumiErr = pulumibridge.Refresh(ctx, stack, opts.Verbose)
 	default:
+		close(done)
 		return fmt.Errorf("unknown operation: %s", op)
 	}
+	close(done)
 
 	// Save stack config back to config store (captures newly set secrets, etc.)
 	if err := git.SaveStackConfig(t.App, t.Stack); err != nil {

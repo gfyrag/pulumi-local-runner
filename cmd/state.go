@@ -155,11 +155,38 @@ func init() {
 				return nil
 			}
 
+			// Collect URNs of pending CREATEs — these resources must be
+			// removed from the resources list so Pulumi doesn't try to
+			// re-create something that may already exist in the provider.
+			pendingCreateURNs := make(map[string]bool)
 			for _, p := range pending {
 				if op, ok := p.(map[string]any); ok {
+					opType, _ := op["type"].(string)
 					if res, ok := op["resource"].(map[string]any); ok {
-						fmt.Printf("Clearing: %s (%s)\n", res["urn"], op["type"])
+						urn, _ := res["urn"].(string)
+						fmt.Printf("Clearing: %s (%s)\n", urn, opType)
+						if opType == "creating" {
+							pendingCreateURNs[urn] = true
+						}
 					}
+				}
+			}
+
+			// Remove resources that were interrupted mid-create
+			if len(pendingCreateURNs) > 0 {
+				if resources, ok := state["resources"].([]any); ok {
+					var filtered []any
+					for _, r := range resources {
+						res, ok := r.(map[string]any)
+						if ok {
+							if urn, ok := res["urn"].(string); ok && pendingCreateURNs[urn] {
+								fmt.Printf("Removed incomplete resource: %s\n", urn)
+								continue
+							}
+						}
+						filtered = append(filtered, r)
+					}
+					state["resources"] = filtered
 				}
 			}
 
