@@ -1,0 +1,118 @@
+package pulumi
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/pulumi/pulumi/sdk/v3/go/auto"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optpreview"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optrefresh"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
+	"gopkg.in/yaml.v3"
+
+	"github.com/gfyrag/plr/internal/config"
+	"github.com/gfyrag/plr/internal/ui"
+)
+
+type pulumiProject struct {
+	Name string `yaml:"name"`
+}
+
+func detectProjectName(workDir string) (string, error) {
+	data, err := os.ReadFile(filepath.Join(workDir, "Pulumi.yaml"))
+	if err != nil {
+		return "", fmt.Errorf("reading Pulumi.yaml in %q: %w", workDir, err)
+	}
+	var proj pulumiProject
+	if err := yaml.Unmarshal(data, &proj); err != nil {
+		return "", fmt.Errorf("parsing Pulumi.yaml: %w", err)
+	}
+	if proj.Name == "" {
+		return "", fmt.Errorf("Pulumi.yaml in %q has no project name", workDir)
+	}
+	return proj.Name, nil
+}
+
+// GetStack returns a Pulumi stack, creating it if it doesn't exist.
+// If the stack config has an org, the fully qualified stack name (org/project/stack) is used.
+func GetStack(ctx context.Context, stack *config.Stack, workDir string) (auto.Stack, error) {
+	stackName := stack.Name
+
+	if stack.Org != "" {
+		project := stack.Project
+		if project == "" {
+			var err error
+			project, err = detectProjectName(workDir)
+			if err != nil {
+				return auto.Stack{}, err
+			}
+		}
+		stackName = fmt.Sprintf("%s/%s/%s", stack.Org, project, stack.Name)
+	}
+
+	ui.Info("Selecting stack %s...", stackName)
+	s, err := auto.UpsertStackLocalSource(ctx, stackName, workDir)
+	if err != nil {
+		return s, fmt.Errorf("upsert stack %q in %q: %w", stackName, workDir, err)
+	}
+	return s, nil
+}
+
+func Up(ctx context.Context, stack auto.Stack) error {
+	ui.Info("Running pulumi up...")
+	_, err := stack.Up(ctx,
+		optup.ProgressStreams(os.Stdout),
+		optup.ErrorProgressStreams(os.Stderr),
+	)
+	return err
+}
+
+func Preview(ctx context.Context, stack auto.Stack) error {
+	ui.Info("Running pulumi preview...")
+	_, err := stack.Preview(ctx,
+		optpreview.ProgressStreams(os.Stdout),
+		optpreview.ErrorProgressStreams(os.Stderr),
+		optpreview.Diff(),
+	)
+	return err
+}
+
+func Destroy(ctx context.Context, stack auto.Stack) error {
+	ui.Info("Running pulumi destroy...")
+	_, err := stack.Destroy(ctx,
+		optdestroy.ProgressStreams(os.Stdout),
+		optdestroy.ErrorProgressStreams(os.Stderr),
+	)
+	return err
+}
+
+func Refresh(ctx context.Context, stack auto.Stack) error {
+	ui.Info("Running pulumi refresh...")
+	_, err := stack.Refresh(ctx,
+		optrefresh.ProgressStreams(os.Stdout),
+		optrefresh.ErrorProgressStreams(os.Stderr),
+	)
+	return err
+}
+
+func SetConfig(ctx context.Context, stack auto.Stack, key, value string, secret bool) error {
+	return stack.SetConfig(ctx, key, auto.ConfigValue{
+		Value:  value,
+		Secret: secret,
+	})
+}
+
+func GetConfig(ctx context.Context, stack auto.Stack, key string) (auto.ConfigValue, error) {
+	return stack.GetConfig(ctx, key)
+}
+
+func GetAllConfig(ctx context.Context, stack auto.Stack) (auto.ConfigMap, error) {
+	return stack.GetAllConfig(ctx)
+}
+
+func RemoveConfig(ctx context.Context, stack auto.Stack, key string) error {
+	return stack.RemoveConfig(ctx, key)
+}
