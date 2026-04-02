@@ -8,8 +8,9 @@ import (
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "preview [app[/stack]...]",
-		Short: "Preview stack changes",
+		Use:     "preview [app[/stack]...]",
+		Aliases: []string{"pre"},
+		Short:   "Preview stack changes",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()

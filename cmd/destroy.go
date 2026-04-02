@@ -8,8 +8,9 @@ import (
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "destroy [app[/stack]...]",
-		Short: "Destroy stacks",
+		Use:     "destroy [app[/stack]...]",
+		Aliases: []string{"down"},
+		Short:   "Destroy stacks",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()

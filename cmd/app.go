@@ -59,8 +59,9 @@ func init() {
 
 	// app remove
 	appCmd.AddCommand(&cobra.Command{
-		Use:   "remove <name>",
-		Short: "Remove an app",
+		Use:     "remove <name>",
+		Aliases: []string{"rm"},
+		Short:   "Remove an app",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -91,8 +92,9 @@ func init() {
 
 	// app list
 	appCmd.AddCommand(&cobra.Command{
-		Use:   "list",
-		Short: "List all apps",
+		Use:     "list",
+		Aliases: []string{"ls"},
+		Short:   "List all apps",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()

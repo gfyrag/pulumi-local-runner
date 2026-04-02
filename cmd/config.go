@@ -80,8 +80,9 @@ func init() {
 
 	// config list
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "list <app/stack>",
-		Short: "List all config values",
+		Use:     "list <app/stack>",
+		Aliases: []string{"ls"},
+		Short:   "List all config values",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			app, stack, err := resolveAppStack(args[0])

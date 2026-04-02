@@ -76,8 +76,9 @@ func init() {
 
 	// stack list
 	stackCmd.AddCommand(&cobra.Command{
-		Use:   "list [app]",
-		Short: "List stacks",
+		Use:     "list [app]",
+		Aliases: []string{"ls"},
+		Short:   "List stacks",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
@@ -123,8 +124,9 @@ func init() {
 
 	// stack cp
 	stackCmd.AddCommand(&cobra.Command{
-		Use:   "cp <src-app/stack> <dst-app/stack>",
-		Short: "Copy a stack to another app (config entry + Pulumi config file)",
+		Use:     "cp <src-app/stack> <dst-app/stack>",
+		Aliases: []string{"copy"},
+		Short:   "Copy a stack to another app (config entry + Pulumi config file)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srcParts := strings.SplitN(args[0], "/", 2)
@@ -195,8 +197,9 @@ func init() {
 
 	// stack remove
 	stackCmd.AddCommand(&cobra.Command{
-		Use:   "remove <app/stack>",
-		Short: "Remove a stack from an app",
+		Use:     "remove <app/stack>",
+		Aliases: []string{"rm"},
+		Short:   "Remove a stack from an app",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			parts := strings.SplitN(args[0], "/", 2)

@@ -8,8 +8,9 @@ import (
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "up [app[/stack]...]",
-		Short: "Deploy stacks",
+		Use:     "up [app[/stack]...]",
+		Aliases: []string{"deploy"},
+		Short:   "Deploy stacks",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()

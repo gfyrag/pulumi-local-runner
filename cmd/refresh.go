@@ -8,8 +8,9 @@ import (
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "refresh [app[/stack]...]",
-		Short: "Refresh stack state",
+		Use:     "refresh [app[/stack]...]",
+		Aliases: []string{"ref"},
+		Short:   "Refresh stack state",
 		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := config.Load()
