@@ -1,0 +1,182 @@
+package cmd
+
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/gfyrag/plr/internal/git"
+	pulumibridge "github.com/gfyrag/plr/internal/pulumi"
+	"github.com/spf13/cobra"
+)
+
+var stateCmd = &cobra.Command{
+	Use:   "state",
+	Short: "Manage Pulumi stack state",
+}
+
+func init() {
+	rootCmd.AddCommand(stateCmd)
+
+	// state delete
+	var force bool
+	deleteCmd := &cobra.Command{
+		Use:   "delete <app/stack> <urn>",
+		Short: "Remove a resource from the stack state",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, stack, err := resolveAppStack(args[0])
+			if err != nil {
+				return err
+			}
+			urn := args[1]
+
+			workDir, err := git.WorkDir(app)
+			if err != nil {
+				return err
+			}
+
+			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
+			if err != nil {
+				return err
+			}
+
+			deployment, err := s.Export(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("exporting state: %w", err)
+			}
+
+			var state map[string]any
+			if err := json.Unmarshal(deployment.Deployment, &state); err != nil {
+				return fmt.Errorf("parsing state: %w", err)
+			}
+
+			// Remove from resources
+			modified := false
+			if resources, ok := state["resources"].([]any); ok {
+				var filtered []any
+				for _, r := range resources {
+					res, ok := r.(map[string]any)
+					if !ok {
+						filtered = append(filtered, r)
+						continue
+					}
+					if res["urn"] == urn {
+						modified = true
+						fmt.Printf("Removed resource: %s\n", urn)
+						continue
+					}
+					// Also remove any resource that has this URN as parent
+					if !force {
+						filtered = append(filtered, r)
+					} else if res["parent"] == urn {
+						modified = true
+						fmt.Printf("Removed child resource: %s\n", res["urn"])
+					} else {
+						filtered = append(filtered, r)
+					}
+				}
+				state["resources"] = filtered
+			}
+
+			// Clear pending operations referencing this URN
+			if pending, ok := state["pending_operations"].([]any); ok {
+				var filtered []any
+				for _, p := range pending {
+					op, ok := p.(map[string]any)
+					if !ok {
+						filtered = append(filtered, p)
+						continue
+					}
+					if res, ok := op["resource"].(map[string]any); ok && res["urn"] == urn {
+						modified = true
+						fmt.Printf("Cleared pending operation on: %s\n", urn)
+						continue
+					}
+					filtered = append(filtered, p)
+				}
+				state["pending_operations"] = filtered
+			}
+
+			if !modified {
+				return fmt.Errorf("URN %q not found in state", urn)
+			}
+
+			data, err := json.Marshal(state)
+			if err != nil {
+				return fmt.Errorf("serializing state: %w", err)
+			}
+			deployment.Deployment = data
+
+			if err := s.Import(cmd.Context(), deployment); err != nil {
+				return fmt.Errorf("importing state: %w", err)
+			}
+
+			fmt.Println("State updated successfully.")
+			return nil
+		},
+	}
+	deleteCmd.Flags().BoolVarP(&force, "force", "f", false, "Also remove child resources")
+	stateCmd.AddCommand(deleteCmd)
+
+	// state clear-pending
+	stateCmd.AddCommand(&cobra.Command{
+		Use:   "clear-pending <app/stack>",
+		Short: "Clear all pending operations from the stack state",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, stack, err := resolveAppStack(args[0])
+			if err != nil {
+				return err
+			}
+
+			workDir, err := git.WorkDir(app)
+			if err != nil {
+				return err
+			}
+
+			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
+			if err != nil {
+				return err
+			}
+
+			deployment, err := s.Export(cmd.Context())
+			if err != nil {
+				return fmt.Errorf("exporting state: %w", err)
+			}
+
+			var state map[string]any
+			if err := json.Unmarshal(deployment.Deployment, &state); err != nil {
+				return fmt.Errorf("parsing state: %w", err)
+			}
+
+			pending, ok := state["pending_operations"].([]any)
+			if !ok || len(pending) == 0 {
+				fmt.Println("No pending operations.")
+				return nil
+			}
+
+			for _, p := range pending {
+				if op, ok := p.(map[string]any); ok {
+					if res, ok := op["resource"].(map[string]any); ok {
+						fmt.Printf("Clearing: %s (%s)\n", res["urn"], op["type"])
+					}
+				}
+			}
+
+			state["pending_operations"] = []any{}
+
+			data, err := json.Marshal(state)
+			if err != nil {
+				return fmt.Errorf("serializing state: %w", err)
+			}
+			deployment.Deployment = data
+
+			if err := s.Import(cmd.Context(), deployment); err != nil {
+				return fmt.Errorf("importing state: %w", err)
+			}
+
+			fmt.Printf("Cleared %d pending operation(s).\n", len(pending))
+			return nil
+		},
+	})
+}
