@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -153,6 +154,37 @@ func init() {
 
 			fmt.Printf("Imported config to %s\n", destPath)
 			return nil
+		},
+	})
+
+	// config edit
+	configCmd.AddCommand(&cobra.Command{
+		Use:   "edit <app/stack>",
+		Short: "Open the stack config file in your editor",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			app, stack, err := resolveAppStack(args[0])
+			if err != nil {
+				return err
+			}
+
+			workDir, err := git.WorkDir(app)
+			if err != nil {
+				return err
+			}
+
+			configFile := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
+
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				editor = "vi"
+			}
+
+			c := exec.Command(editor, configFile)
+			c.Stdin = os.Stdin
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			return c.Run()
 		},
 	})
 

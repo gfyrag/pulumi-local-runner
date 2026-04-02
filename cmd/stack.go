@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/fatih/color"
 	"github.com/gfyrag/plr/internal/config"
+	"github.com/gfyrag/plr/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -115,6 +118,80 @@ func init() {
 					fmt.Println()
 				}
 			}
+			return nil
+		},
+	})
+
+	// stack cp
+	stackCmd.AddCommand(&cobra.Command{
+		Use:   "cp <src-app/stack> <dst-app/stack>",
+		Short: "Copy a stack to another app (config entry + Pulumi config file)",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			srcParts := strings.SplitN(args[0], "/", 2)
+			if len(srcParts) != 2 {
+				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			}
+			dstParts := strings.SplitN(args[1], "/", 2)
+			if len(dstParts) != 2 {
+				return fmt.Errorf("expected app/stack format, got %q", args[1])
+			}
+
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+
+			srcApp, err := cfg.FindApp(srcParts[0])
+			if err != nil {
+				return err
+			}
+			srcStack, err := srcApp.FindStack(srcParts[1])
+			if err != nil {
+				return err
+			}
+
+			dstApp, err := cfg.FindApp(dstParts[0])
+			if err != nil {
+				return err
+			}
+			if _, err := dstApp.FindStack(dstParts[1]); err == nil {
+				return fmt.Errorf("stack %q already exists in app %q", dstParts[1], dstApp.Name)
+			}
+
+			// Copy stack definition with new name
+			newStack := *srcStack
+			newStack.Name = dstParts[1]
+			dstApp.Stacks = append(dstApp.Stacks, newStack)
+
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+
+			// Copy Pulumi config file if it exists
+			srcDir, err := git.WorkDir(srcApp)
+			if err != nil {
+				return err
+			}
+			srcPath := filepath.Join(srcDir, fmt.Sprintf("Pulumi.%s.yaml", srcStack.Name))
+
+			if data, err := os.ReadFile(srcPath); err == nil {
+				dstDir, err := git.WorkDir(dstApp)
+				if err != nil {
+					return err
+				}
+				dstPath := filepath.Join(dstDir, fmt.Sprintf("Pulumi.%s.yaml", dstParts[1]))
+				if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
+					return err
+				}
+				if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+					return fmt.Errorf("writing %s: %w", dstPath, err)
+				}
+				fmt.Printf("Copied stack %s → %s (config entry + Pulumi config file)\n", args[0], args[1])
+			} else {
+				fmt.Printf("Copied stack %s → %s (config entry only, no Pulumi config file found)\n", args[0], args[1])
+			}
+
 			return nil
 		},
 	})
