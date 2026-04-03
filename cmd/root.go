@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -40,9 +41,9 @@ func runOptions() engine.RunOptions {
 	}
 }
 
-// getStore creates the default config store.
+// getStore creates the config store based on backend.yaml configuration.
 func getStore() (store.Store, error) {
-	return store.NewDefaultLocalStore()
+	return store.NewStoreFromConfig(context.Background())
 }
 
 // completeTargets provides shell completion for app/stack targets.
