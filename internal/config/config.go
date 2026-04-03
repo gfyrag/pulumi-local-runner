@@ -1,12 +1,9 @@
 package config
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-
-	"gopkg.in/yaml.v3"
 )
 
 type Stack struct {
@@ -49,70 +46,6 @@ func CacheDir() (string, error) {
 		return "", fmt.Errorf("could not determine home directory: %w", err)
 	}
 	return filepath.Join(home, ".cache", "plr", "repos"), nil
-}
-
-func ConfigPath() (string, error) {
-	dir, err := ConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "config.yaml"), nil
-}
-
-// StackConfigPath returns the path where a stack's Pulumi config is stored.
-// This is outside the git repo to avoid checkout conflicts.
-func StackConfigPath(appName, stackName string) (string, error) {
-	dir, err := ConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "stacks", appName, fmt.Sprintf("Pulumi.%s.yaml", stackName)), nil
-}
-
-func Load() (*Config, error) {
-	path, err := ConfigPath()
-	if err != nil {
-		return nil, err
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return &Config{}, nil
-		}
-		return nil, fmt.Errorf("reading config: %w", err)
-	}
-
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
-	}
-
-	for i := range cfg.Apps {
-		if cfg.Apps[i].Path == "" {
-			cfg.Apps[i].Path = "."
-		}
-	}
-
-	return &cfg, nil
-}
-
-func Save(cfg *Config) error {
-	path, err := ConfigPath()
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("creating config directory: %w", err)
-	}
-
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
-	}
-
-	return os.WriteFile(path, data, 0o644)
 }
 
 // Validate checks the config for structural errors.

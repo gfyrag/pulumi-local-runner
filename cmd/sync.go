@@ -1,18 +1,22 @@
 package cmd
 
 import (
-	"github.com/gfyrag/plr/internal/config"
 	"github.com/gfyrag/plr/internal/engine"
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "sync [app[/stack]...]",
-		Short: "Clone/pull repos without running Pulumi",
-		Args:  cobra.ArbitraryArgs,
+		Use:               "sync [app[/stack]...]",
+		Short:             "Clone/pull repos without running Pulumi",
+		Args:              cobra.ArbitraryArgs,
+		ValidArgsFunction: completeTargets,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+			cfg, err := s.LoadConfig()
 			if err != nil {
 				return err
 			}
@@ -20,7 +24,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			return engine.Run(cmd.Context(), cfg, targets, engine.OpSync, runOptions())
+			return engine.Run(cmd.Context(), s, cfg, targets, engine.OpSync, runOptions())
 		},
 	})
 }

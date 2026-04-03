@@ -6,112 +6,6 @@ import (
 	"testing"
 )
 
-func TestLoadNonExistent(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	cfg, err := Load()
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if len(cfg.Apps) != 0 {
-		t.Fatalf("expected empty config, got %d apps", len(cfg.Apps))
-	}
-}
-
-func TestLoadAndSaveRoundtrip(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	original := &Config{
-		Apps: []App{
-			{
-				Name: "myapp",
-				Repo: "git@github.com:org/myapp.git",
-				Path: "infra",
-				Stacks: []Stack{
-					{Name: "dev", Branch: "main"},
-					{Name: "prod", Ref: "v1.0.0"},
-				},
-			},
-		},
-	}
-
-	if err := Save(original); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	loaded, err := Load()
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	if len(loaded.Apps) != 1 {
-		t.Fatalf("expected 1 app, got %d", len(loaded.Apps))
-	}
-	app := loaded.Apps[0]
-	if app.Name != "myapp" {
-		t.Errorf("name = %q, want %q", app.Name, "myapp")
-	}
-	if app.Repo != "git@github.com:org/myapp.git" {
-		t.Errorf("repo = %q", app.Repo)
-	}
-	if app.Path != "infra" {
-		t.Errorf("path = %q, want %q", app.Path, "infra")
-	}
-	if len(app.Stacks) != 2 {
-		t.Fatalf("expected 2 stacks, got %d", len(app.Stacks))
-	}
-	if app.Stacks[0].Branch != "main" {
-		t.Errorf("stack[0].branch = %q", app.Stacks[0].Branch)
-	}
-	if app.Stacks[1].Ref != "v1.0.0" {
-		t.Errorf("stack[1].ref = %q", app.Stacks[1].Ref)
-	}
-}
-
-func TestLoadDefaultPath(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-
-	cfg := &Config{
-		Apps: []App{
-			{
-				Name:   "nopath",
-				Repo:   "git@github.com:org/nopath.git",
-				Stacks: []Stack{{Name: "dev", Branch: "main"}},
-			},
-		},
-	}
-	if err := Save(cfg); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	loaded, err := Load()
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if loaded.Apps[0].Path != "." {
-		t.Errorf("expected default path %q, got %q", ".", loaded.Apps[0].Path)
-	}
-}
-
-func TestLoadInvalidYAML(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
-
-	path := filepath.Join(dir, "plr", "config.yaml")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for invalid YAML")
-	}
-}
-
 func TestFindApp(t *testing.T) {
 	cfg := &Config{
 		Apps: []App{
@@ -267,5 +161,22 @@ func TestCacheDirXDG(t *testing.T) {
 	}
 	if got != filepath.Join(dir, "plr") {
 		t.Errorf("got %q, want %q", got, filepath.Join(dir, "plr"))
+	}
+}
+
+func TestCacheDirDefault(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", "")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := CacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(home, ".cache", "plr", "repos")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

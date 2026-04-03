@@ -6,12 +6,13 @@ import (
 	"strings"
 
 	"github.com/gfyrag/plr/internal/engine"
+	"github.com/gfyrag/plr/internal/store"
 	"github.com/spf13/cobra"
 )
 
 var (
-	verbose       bool
-	configValues  []string
+	verbose      bool
+	configValues []string
 )
 
 var rootCmd = &cobra.Command{
@@ -37,6 +38,45 @@ func runOptions() engine.RunOptions {
 		Verbose:         verbose,
 		ConfigOverrides: overrides,
 	}
+}
+
+// getStore creates the default config store.
+func getStore() (store.Store, error) {
+	return store.NewDefaultLocalStore()
+}
+
+// completeTargets provides shell completion for app/stack targets.
+func completeTargets(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	s, err := getStore()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg, err := s.LoadConfig()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	existing := make(map[string]bool)
+	for _, a := range args {
+		existing[a] = true
+	}
+
+	var completions []string
+	for _, app := range cfg.Apps {
+		// Suggest app name (selects all stacks)
+		if !existing[app.Name] && strings.HasPrefix(app.Name, toComplete) {
+			completions = append(completions, app.Name)
+		}
+		// Suggest app/stack pairs
+		for _, st := range app.Stacks {
+			target := app.Name + "/" + st.Name
+			if !existing[target] && strings.HasPrefix(target, toComplete) {
+				completions = append(completions, target)
+			}
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
 }
 
 func Execute() {

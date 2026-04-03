@@ -28,7 +28,12 @@ func init() {
 		Short: "Add an app",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := s.LoadConfig()
 			if err != nil {
 				return err
 			}
@@ -45,7 +50,7 @@ func init() {
 			}
 
 			cfg.Apps = append(cfg.Apps, app)
-			if err := config.Save(cfg); err != nil {
+			if err := s.SaveConfig(cfg); err != nil {
 				return err
 			}
 			fmt.Printf("Added app %q\n", name)
@@ -62,9 +67,14 @@ func init() {
 		Use:     "remove <name>",
 		Aliases: []string{"rm"},
 		Short:   "Remove an app",
-		Args:  cobra.ExactArgs(1),
+		Args:    cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := s.LoadConfig()
 			if err != nil {
 				return err
 			}
@@ -82,7 +92,7 @@ func init() {
 			}
 
 			cfg.Apps = append(cfg.Apps[:idx], cfg.Apps[idx+1:]...)
-			if err := config.Save(cfg); err != nil {
+			if err := s.SaveConfig(cfg); err != nil {
 				return err
 			}
 			fmt.Printf("Removed app %q\n", name)
@@ -95,9 +105,14 @@ func init() {
 		Use:     "list",
 		Aliases: []string{"ls"},
 		Short:   "List all apps",
-		Args:  cobra.NoArgs,
+		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load()
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := s.LoadConfig()
 			if err != nil {
 				return err
 			}
@@ -115,11 +130,11 @@ func init() {
 				if len(app.Stacks) == 0 {
 					appDim.Print("(none)")
 				}
-				for i, s := range app.Stacks {
+				for i, st := range app.Stacks {
 					if i > 0 {
 						fmt.Print(", ")
 					}
-					fmt.Print(s.Name)
+					fmt.Print(st.Name)
 				}
 				fmt.Println()
 			}

@@ -8,6 +8,7 @@ import (
 	"github.com/gfyrag/plr/internal/config"
 	"github.com/gfyrag/plr/internal/git"
 	pulumibridge "github.com/gfyrag/plr/internal/pulumi"
+	"github.com/gfyrag/plr/internal/store"
 	"github.com/gfyrag/plr/internal/ui"
 )
 
@@ -98,7 +99,7 @@ type RunOptions struct {
 }
 
 // Run executes the given operation on the resolved targets, respecting dependency order.
-func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation, opts RunOptions) error {
+func Run(ctx context.Context, s store.Store, cfg *config.Config, targets []Target, op Operation, opts RunOptions) error {
 	if len(targets) == 0 {
 		ui.Warn("No targets to run.")
 		return nil
@@ -113,7 +114,7 @@ func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation
 	failed := 0
 	var errs []string
 	for _, t := range ordered {
-		if err := runOne(ctx, t, op, opts); err != nil {
+		if err := runOne(ctx, s, t, op, opts); err != nil {
 			failed++
 			errs = append(errs, fmt.Sprintf("%s: %s", t.Key(), err))
 			ui.ResultFail(t.Key(), err.Error())
@@ -131,10 +132,10 @@ func Run(ctx context.Context, cfg *config.Config, targets []Target, op Operation
 	return nil
 }
 
-func runOne(ctx context.Context, t Target, op Operation, opts RunOptions) error {
+func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts RunOptions) error {
 	ui.Header(t.Key(), op.String())
 
-	if err := git.Sync(t.App, t.Stack); err != nil {
+	if err := git.Sync(s, t.App, t.Stack); err != nil {
 		return fmt.Errorf("git sync: %w", err)
 	}
 
@@ -191,7 +192,7 @@ func runOne(ctx context.Context, t Target, op Operation, opts RunOptions) error 
 	close(done)
 
 	// Save stack config back to config store (captures newly set secrets, etc.)
-	if err := git.SaveStackConfig(t.App, t.Stack); err != nil {
+	if err := git.SaveStackConfig(s, t.App, t.Stack); err != nil {
 		ui.Warn("Failed to save stack config: %s", err)
 	}
 

@@ -24,7 +24,12 @@ func init() {
 		Short: "Remove a resource from the stack state",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, stack, err := resolveAppStack(args[0])
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			app, stack, err := resolveAppStack(s, args[0])
 			if err != nil {
 				return err
 			}
@@ -35,12 +40,12 @@ func init() {
 				return err
 			}
 
-			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
+			ps, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
 			if err != nil {
 				return err
 			}
 
-			deployment, err := s.Export(cmd.Context())
+			deployment, err := ps.Export(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("exporting state: %w", err)
 			}
@@ -107,7 +112,7 @@ func init() {
 			}
 			deployment.Deployment = data
 
-			if err := s.Import(cmd.Context(), deployment); err != nil {
+			if err := ps.Import(cmd.Context(), deployment); err != nil {
 				return fmt.Errorf("importing state: %w", err)
 			}
 
@@ -124,7 +129,12 @@ func init() {
 		Short: "Clear all pending operations from the stack state",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			app, stack, err := resolveAppStack(args[0])
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			app, stack, err := resolveAppStack(s, args[0])
 			if err != nil {
 				return err
 			}
@@ -134,12 +144,12 @@ func init() {
 				return err
 			}
 
-			s, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
+			ps, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
 			if err != nil {
 				return err
 			}
 
-			deployment, err := s.Export(cmd.Context())
+			deployment, err := ps.Export(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("exporting state: %w", err)
 			}
@@ -198,7 +208,7 @@ func init() {
 			}
 			deployment.Deployment = data
 
-			if err := s.Import(cmd.Context(), deployment); err != nil {
+			if err := ps.Import(cmd.Context(), deployment); err != nil {
 				return fmt.Errorf("importing state: %w", err)
 			}
 
