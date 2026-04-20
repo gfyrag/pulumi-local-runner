@@ -65,9 +65,7 @@ func (c *Config) Validate() error {
 		}
 		appNames[app.Name] = true
 
-		if len(app.Stacks) == 0 {
-			return fmt.Errorf("app %q: at least one stack is required", app.Name)
-		}
+
 
 		stackNames := make(map[string]bool)
 		for j, stack := range app.Stacks {

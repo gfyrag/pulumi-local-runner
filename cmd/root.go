@@ -46,7 +46,7 @@ func getStore() (store.Store, error) {
 	return store.NewStoreFromConfig(context.Background())
 }
 
-// completeTargets provides shell completion for app/stack targets.
+// completeTargets provides shell completion for app/stack targets (multi-arg).
 func completeTargets(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	s, err := getStore()
 	if err != nil {
@@ -73,6 +73,59 @@ func completeTargets(cmd *cobra.Command, args []string, toComplete string) ([]st
 		for _, st := range app.Stacks {
 			target := app.Name + "/" + st.Name
 			if !existing[target] && strings.HasPrefix(target, toComplete) {
+				completions = append(completions, target)
+			}
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeApps provides shell completion for app names only.
+func completeApps(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	s, err := getStore()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg, err := s.LoadConfig()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var completions []string
+	for _, app := range cfg.Apps {
+		if strings.HasPrefix(app.Name, toComplete) {
+			completions = append(completions, app.Name)
+		}
+	}
+	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
+// completeAppStacks provides shell completion for a single app/stack argument.
+func completeAppStacks(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	s, err := getStore()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	cfg, err := s.LoadConfig()
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var completions []string
+	for _, app := range cfg.Apps {
+		for _, st := range app.Stacks {
+			target := app.Name + "/" + st.Name
+			if strings.HasPrefix(target, toComplete) {
 				completions = append(completions, target)
 			}
 		}

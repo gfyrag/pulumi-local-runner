@@ -83,7 +83,7 @@ func TestValidate(t *testing.T) {
 		{
 			name:    "no stacks",
 			cfg:     Config{Apps: []App{{Name: "a", Repo: "r"}}},
-			wantErr: true,
+			wantErr: false,
 		},
 		{
 			name:    "empty stack name",

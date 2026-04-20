@@ -25,9 +25,10 @@ func init() {
 	// config set
 	setSecret := false
 	setCmd := &cobra.Command{
-		Use:   "set <app/stack> <key> <value>",
-		Short: "Set a config value",
-		Args:  cobra.ExactArgs(3),
+		Use:               "set <app/stack> <key> <value>",
+		Short:             "Set a config value",
+		Args:              cobra.ExactArgs(3),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -56,9 +57,10 @@ func init() {
 
 	// config get
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "get <app/stack> <key>",
-		Short: "Get a config value",
-		Args:  cobra.ExactArgs(2),
+		Use:               "get <app/stack> <key>",
+		Short:             "Get a config value",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -91,10 +93,11 @@ func init() {
 
 	// config list
 	configCmd.AddCommand(&cobra.Command{
-		Use:     "list <app/stack>",
-		Aliases: []string{"ls"},
-		Short:   "List all config values",
-		Args:    cobra.ExactArgs(1),
+		Use:               "list <app/stack>",
+		Aliases:           []string{"ls"},
+		Short:             "List all config values",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -129,9 +132,10 @@ func init() {
 
 	// config import — reads a local file and writes to store
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "import <app/stack> <path-to-Pulumi.stack.yaml>",
-		Short: "Import a Pulumi stack config file",
-		Args:  cobra.ExactArgs(2),
+		Use:               "import <app/stack> <path-to-Pulumi.stack.yaml>",
+		Short:             "Import a Pulumi stack config file",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -160,9 +164,10 @@ func init() {
 
 	// config edit — for local stores, downloads to a temp file, opens editor, uploads back
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "edit <app/stack>",
-		Short: "Open the stack config file in your editor",
-		Args:  cobra.ExactArgs(1),
+		Use:               "edit <app/stack>",
+		Short:             "Open the stack config file in your editor",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -219,9 +224,10 @@ func init() {
 
 	// config rm
 	configCmd.AddCommand(&cobra.Command{
-		Use:   "rm <app/stack> <key>",
-		Short: "Remove a config value",
-		Args:  cobra.ExactArgs(2),
+		Use:               "rm <app/stack> <key>",
+		Short:             "Remove a config value",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {

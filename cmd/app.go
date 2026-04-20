@@ -64,10 +64,11 @@ func init() {
 
 	// app remove
 	appCmd.AddCommand(&cobra.Command{
-		Use:     "remove <name>",
-		Aliases: []string{"rm"},
-		Short:   "Remove an app",
-		Args:    cobra.ExactArgs(1),
+		Use:               "remove <name>",
+		Aliases:           []string{"rm"},
+		Short:             "Remove an app",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeApps,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {

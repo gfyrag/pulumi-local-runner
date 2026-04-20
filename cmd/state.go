@@ -20,9 +20,10 @@ func init() {
 	// state delete
 	var force bool
 	deleteCmd := &cobra.Command{
-		Use:   "delete <app/stack> <urn>",
-		Short: "Remove a resource from the stack state",
-		Args:  cobra.ExactArgs(2),
+		Use:               "delete <app/stack> <urn>",
+		Short:             "Remove a resource from the stack state",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -125,9 +126,10 @@ func init() {
 
 	// state clear-pending
 	stateCmd.AddCommand(&cobra.Command{
-		Use:   "clear-pending <app/stack>",
-		Short: "Clear all pending operations from the stack state",
-		Args:  cobra.ExactArgs(1),
+		Use:               "clear-pending <app/stack>",
+		Short:             "Clear all pending operations from the stack state",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {

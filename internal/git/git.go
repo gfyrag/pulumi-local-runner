@@ -5,14 +5,32 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/gfyrag/plr/internal/config"
 	"github.com/gfyrag/plr/internal/store"
 	"github.com/gfyrag/plr/internal/ui"
 )
 
+// isLocalRepo returns true if the repo field points to a local directory.
+func isLocalRepo(repo string) bool {
+	return strings.HasPrefix(repo, "/") || strings.HasPrefix(repo, "./") || strings.HasPrefix(repo, "../") || strings.HasPrefix(repo, "~")
+}
+
 // RepoDir returns the local cache directory for the given app.
+// If the app repo is a local path, it returns that path directly.
 func RepoDir(app *config.App) (string, error) {
+	if isLocalRepo(app.Repo) {
+		repo := app.Repo
+		if strings.HasPrefix(repo, "~") {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return "", fmt.Errorf("could not determine home directory: %w", err)
+			}
+			repo = filepath.Join(home, repo[1:])
+		}
+		return filepath.Clean(repo), nil
+	}
 	cacheDir, err := config.CacheDir()
 	if err != nil {
 		return "", err
@@ -30,26 +48,33 @@ func WorkDir(app *config.App) (string, error) {
 }
 
 // Sync clones the repo if it doesn't exist, fetches updates, and checks out the given ref.
+// For local repos, it skips clone/fetch and only checks out the requested ref (if any).
 func Sync(s store.Store, app *config.App, stack *config.Stack) error {
 	repoDir, err := RepoDir(app)
 	if err != nil {
 		return err
 	}
 
-	if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
-		ui.Info("Cloning %s...", app.Repo)
-		if err := runGit("clone", app.Repo, repoDir); err != nil {
-			return fmt.Errorf("cloning %s: %w", app.Repo, err)
+	if isLocalRepo(app.Repo) {
+		if err := checkout(repoDir, stack); err != nil {
+			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
 		}
 	} else {
-		ui.Step("Fetching updates...")
-		if err := runGit("-C", repoDir, "fetch", "--all", "--tags", "--prune"); err != nil {
-			return fmt.Errorf("fetching %s: %w", app.Repo, err)
+		if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
+			ui.Info("Cloning %s...", app.Repo)
+			if err := runGit("clone", app.Repo, repoDir); err != nil {
+				return fmt.Errorf("cloning %s: %w", app.Repo, err)
+			}
+		} else {
+			ui.Step("Fetching updates...")
+			if err := runGit("-C", repoDir, "fetch", "--all", "--tags", "--prune"); err != nil {
+				return fmt.Errorf("fetching %s: %w", app.Repo, err)
+			}
 		}
-	}
 
-	if err := checkout(repoDir, stack); err != nil {
-		return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
+		if err := checkout(repoDir, stack); err != nil {
+			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
+		}
 	}
 
 	// Restore stack config from plr config store into workdir

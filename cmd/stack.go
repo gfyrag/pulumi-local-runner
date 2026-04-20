@@ -27,9 +27,10 @@ func init() {
 	var branch, ref, org string
 	var dependsOn []string
 	addCmd := &cobra.Command{
-		Use:   "add <app> <name>",
-		Short: "Add a stack to an app",
-		Args:  cobra.ExactArgs(2),
+		Use:               "add <app> <name>",
+		Short:             "Add a stack to an app",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeApps,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -79,10 +80,11 @@ func init() {
 
 	// stack list
 	stackCmd.AddCommand(&cobra.Command{
-		Use:     "list [app]",
-		Aliases: []string{"ls"},
-		Short:   "List stacks",
-		Args:    cobra.MaximumNArgs(1),
+		Use:               "list [app]",
+		Aliases:           []string{"ls"},
+		Short:             "List stacks",
+		Args:              cobra.MaximumNArgs(1),
+		ValidArgsFunction: completeApps,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {
@@ -105,7 +107,16 @@ func init() {
 				apps = cfg.Apps
 			}
 
-			for _, app := range apps {
+			for i, app := range apps {
+				if i > 0 {
+					fmt.Println()
+				}
+				stackName.Println(app.Name)
+				stackMeta.Printf("  repo: %s\n", app.Repo)
+				if app.Path != "." {
+					stackMeta.Printf("  path: %s\n", app.Path)
+				}
+				fmt.Println()
 				for _, st := range app.Stacks {
 					ref := st.Branch
 					if st.Ref != "" {
@@ -114,11 +125,15 @@ func init() {
 					if ref == "" {
 						ref = "(default)"
 					}
-					stackName.Printf("%s/%s", app.Name, st.Name)
+					fmt.Print("  ")
+					stackName.Print(st.Name)
 					fmt.Print("  ")
 					stackRef.Print(ref)
 					if st.Org != "" {
 						stackMeta.Printf("  org:%s", st.Org)
+					}
+					if st.Project != "" {
+						stackMeta.Printf("  project:%s", st.Project)
 					}
 					if len(st.DependsOn) > 0 {
 						stackMeta.Printf("  deps:%s", strings.Join(st.DependsOn, ","))
@@ -132,10 +147,11 @@ func init() {
 
 	// stack cp
 	stackCmd.AddCommand(&cobra.Command{
-		Use:     "cp <src-app/stack> <dst-app/stack>",
-		Aliases: []string{"copy"},
-		Short:   "Copy a stack to another app (config entry + Pulumi config file)",
-		Args:    cobra.ExactArgs(2),
+		Use:               "cp <src-app/stack> <dst-app/stack>",
+		Aliases:           []string{"copy"},
+		Short:             "Copy a stack to another app (config entry + Pulumi config file)",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			srcParts := strings.SplitN(args[0], "/", 2)
 			if len(srcParts) != 2 {
@@ -196,12 +212,84 @@ func init() {
 		},
 	})
 
+	// stack rename
+	stackCmd.AddCommand(&cobra.Command{
+		Use:               "rename <app/stack> <new-name>",
+		Aliases:           []string{"mv"},
+		Short:             "Rename a stack",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeAppStacks,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			parts := strings.SplitN(args[0], "/", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			}
+			newName := args[1]
+
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := s.LoadConfig()
+			if err != nil {
+				return err
+			}
+
+			app, err := cfg.FindApp(parts[0])
+			if err != nil {
+				return err
+			}
+
+			stack, err := app.FindStack(parts[1])
+			if err != nil {
+				return err
+			}
+
+			if _, err := app.FindStack(newName); err == nil {
+				return fmt.Errorf("stack %q already exists in app %q", newName, app.Name)
+			}
+
+			oldName := stack.Name
+
+			// Update dependsOn references across all apps
+			oldKey := app.Name + "/" + oldName
+			newKey := app.Name + "/" + newName
+			for i := range cfg.Apps {
+				for j := range cfg.Apps[i].Stacks {
+					for k, dep := range cfg.Apps[i].Stacks[j].DependsOn {
+						if dep == oldKey {
+							cfg.Apps[i].Stacks[j].DependsOn[k] = newKey
+						}
+					}
+				}
+			}
+
+			stack.Name = newName
+
+			if err := s.SaveConfig(cfg); err != nil {
+				return err
+			}
+
+			// Rename Pulumi stack config file in store
+			if data, readErr := s.ReadStackConfig(app.Name, oldName); readErr == nil && data != nil {
+				if writeErr := s.WriteStackConfig(app.Name, newName, data); writeErr != nil {
+					return fmt.Errorf("renaming stack config: %w", writeErr)
+				}
+			}
+
+			fmt.Printf("Renamed stack %s/%s → %s/%s\n", app.Name, oldName, app.Name, newName)
+			return nil
+		},
+	})
+
 	// stack remove
 	stackCmd.AddCommand(&cobra.Command{
-		Use:     "remove <app/stack>",
-		Aliases: []string{"rm"},
-		Short:   "Remove a stack from an app",
-		Args:    cobra.ExactArgs(1),
+		Use:               "remove <app/stack>",
+		Aliases:           []string{"rm"},
+		Short:             "Remove a stack from an app",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			parts := strings.SplitN(args[0], "/", 2)
 			if len(parts) != 2 {
