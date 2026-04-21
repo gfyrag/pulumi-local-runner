@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gfyrag/plr/internal/config"
@@ -10,6 +11,7 @@ import (
 	pulumibridge "github.com/gfyrag/plr/internal/pulumi"
 	"github.com/gfyrag/plr/internal/store"
 	"github.com/gfyrag/plr/internal/ui"
+	"gopkg.in/yaml.v3"
 )
 
 // Target represents an app/stack pair to operate on.
@@ -146,20 +148,50 @@ func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts Run
 		return nil
 	}
 
-	workDir, err := git.WorkDir(t.App)
+	realWorkDir, err := git.WorkDir(t.App)
 	if err != nil {
 		return err
 	}
+
+	// Persist -c overrides to the store before building the merged config
+	if len(opts.ConfigOverrides) > 0 {
+		if err := persistConfigOverrides(s, t.App, t.Stack, opts.ConfigOverrides, realWorkDir); err != nil {
+			return fmt.Errorf("persisting config overrides: %w", err)
+		}
+	}
+
+	// Create a temp workdir with symlinks + merged config (avoids polluting the real repo)
+	workDir, cleanup, err := git.PrepareWorkDir(s, t.App, t.Stack)
+	if err != nil {
+		return fmt.Errorf("preparing workdir: %w", err)
+	}
+	defer cleanup()
 
 	stack, err := pulumibridge.GetStack(ctx, t.Stack, workDir)
 	if err != nil {
 		return fmt.Errorf("getting stack: %w", err)
 	}
 
-	// Apply config overrides
-	for k, v := range opts.ConfigOverrides {
-		if err := pulumibridge.SetConfig(ctx, stack, k, v, false); err != nil {
-			return fmt.Errorf("setting config override %q: %w", k, err)
+	// Validate config against Pulumi.yaml schema
+	if op == OpUp || op == OpPreview {
+		if schema, err := pulumibridge.LoadConfigSchema(workDir); err == nil && schema != nil {
+			allConfig, configErr := pulumibridge.GetAllConfig(ctx, stack)
+			if configErr == nil {
+				configMap := make(map[string]any)
+				for k := range allConfig {
+					configMap[k] = true
+				}
+				result := pulumibridge.ValidateConfig(schema, configMap)
+				for _, key := range result.Unknown {
+					ui.Warn("Unknown config key: %s", key)
+				}
+				for _, key := range result.Missing {
+					ui.Warn("Missing required config key: %s", key)
+				}
+				if len(result.Missing) > 0 && op == OpUp {
+					return fmt.Errorf("missing required config keys: %v", result.Missing)
+				}
+			}
 		}
 	}
 
@@ -194,16 +226,105 @@ func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts Run
 	}
 	close(done)
 
-	// Save stack config back to config store (captures newly set secrets, etc.)
-	// Skip when bases are configured, since the workdir file is a merged result
-	// that would pollute the stack's own config with base values.
-	if len(t.Stack.Bases) == 0 {
-		if err := git.SaveStackConfig(s, t.App, t.Stack); err != nil {
-			ui.Warn("Failed to save stack config: %s", err)
-		}
+	return pulumiErr
+}
+
+// persistConfigOverrides writes -c overrides into the stack config in the store.
+// It uses the schema to convert values to the correct type.
+func persistConfigOverrides(s store.Store, app *config.App, stack *config.Stack, overrides map[string]string, workDir string) error {
+	data, err := s.ReadStackConfig(app.Name, stack.Name)
+	if err != nil {
+		return err
 	}
 
-	return pulumiErr
+	var m map[string]any
+	if data != nil {
+		if err := yaml.Unmarshal(data, &m); err != nil {
+			return fmt.Errorf("parsing stack config: %w", err)
+		}
+	}
+	if m == nil {
+		m = make(map[string]any)
+	}
+
+	cfg, _ := m["config"].(map[string]any)
+	if cfg == nil {
+		cfg = make(map[string]any)
+	}
+
+	// Load schema for type coercion
+	schema, _ := pulumibridge.LoadConfigSchema(workDir)
+
+	for k, v := range overrides {
+		typed := coerceValue(v, resolveType(schema, k))
+		setNestedValue(cfg, k, typed)
+	}
+
+	m["config"] = cfg
+	out, err := yaml.Marshal(m)
+	if err != nil {
+		return err
+	}
+
+	return s.WriteStackConfig(app.Name, stack.Name, out)
+}
+
+// resolveType finds the schema type for a dot-separated key path.
+func resolveType(schema *pulumibridge.ConfigSchema, key string) string {
+	if schema == nil {
+		return "string"
+	}
+	parts := strings.Split(key, ".")
+	entries := schema.Entries
+	for i, part := range parts {
+		for _, e := range entries {
+			if e.Key == part {
+				if i == len(parts)-1 {
+					return e.Type
+				}
+				entries = e.Properties
+				break
+			}
+		}
+	}
+	return "string"
+}
+
+// coerceValue converts a string value to the appropriate Go type based on the schema type.
+func coerceValue(value, typ string) any {
+	switch typ {
+	case "boolean":
+		return value == "true" || value == "1"
+	case "integer":
+		n, err := strconv.Atoi(value)
+		if err == nil {
+			return n
+		}
+		return value
+	default:
+		return value
+	}
+}
+
+// setNestedValue sets a value at a dot-separated path in a map.
+func setNestedValue(m map[string]any, key string, value any) {
+	parts := strings.Split(key, ".")
+	if len(parts) == 1 {
+		m[key] = value
+		return
+	}
+
+	// Navigate/create nested maps
+	current := m
+	for _, part := range parts[:len(parts)-1] {
+		next, ok := current[part].(map[string]any)
+		if !ok {
+			next = make(map[string]any)
+			current[part] = next
+		}
+		current = next
+	}
+	current[parts[len(parts)-1]] = value
 }
 
 // topoSort orders targets respecting dependsOn. Simple Kahn's algorithm.

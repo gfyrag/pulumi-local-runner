@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/gfyrag/plr/internal/config"
 	"github.com/gfyrag/plr/internal/git"
 	pulumibridge "github.com/gfyrag/plr/internal/pulumi"
@@ -20,6 +20,46 @@ var configCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(configCmd)
+
+	// config schema
+	configCmd.AddCommand(&cobra.Command{
+		Use:               "schema <app/stack>",
+		Short:             "Show available config keys for a stack's Pulumi project",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeAppStacks,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			app, stack, err := resolveAppStack(s, args[0])
+			if err != nil {
+				return err
+			}
+
+			if err := git.Sync(s, app, stack); err != nil {
+				return fmt.Errorf("syncing repo: %w", err)
+			}
+
+			workDir, err := git.WorkDir(app)
+			if err != nil {
+				return err
+			}
+
+			schema, err := pulumibridge.LoadConfigSchema(workDir)
+			if err != nil {
+				return err
+			}
+			if schema == nil {
+				fmt.Println("No config schema defined in Pulumi.yaml")
+				return nil
+			}
+
+			printEntries(schema.Entries, 1)
+			return nil
+		},
+	})
 
 	// config set
 	setSecret := false
@@ -39,10 +79,11 @@ func init() {
 				return err
 			}
 
-			ps, err := getStackWithConfig(cmd, s, app, stack)
+			ps, cleanup, err := getStackWithConfig(cmd, s, app, stack)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 
 			if err := pulumibridge.SetConfig(cmd.Context(), ps, args[1], args[2], setSecret); err != nil {
 				return err
@@ -71,10 +112,11 @@ func init() {
 				return err
 			}
 
-			ps, err := getStackWithConfig(cmd, s, app, stack)
+			ps, cleanup, err := getStackWithConfig(cmd, s, app, stack)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 
 			val, err := pulumibridge.GetConfig(cmd.Context(), ps, args[1])
 			if err != nil {
@@ -108,10 +150,11 @@ func init() {
 				return err
 			}
 
-			ps, err := getStackWithConfig(cmd, s, app, stack)
+			ps, cleanup, err := getStackWithConfig(cmd, s, app, stack)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 
 			all, err := pulumibridge.GetAllConfig(cmd.Context(), ps)
 			if err != nil {
@@ -178,10 +221,11 @@ func init() {
 				return err
 			}
 
-			ps, err := getStackWithConfig(cmd, s, app, stack)
+			ps, cleanup, err := getStackWithConfig(cmd, s, app, stack)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 
 			if err := pulumibridge.RemoveConfig(cmd.Context(), ps, args[1]); err != nil {
 				return err
@@ -192,26 +236,105 @@ func init() {
 	})
 }
 
-// getStackWithConfig restores the config (with base merging) into workdir, then returns the Pulumi stack.
-func getStackWithConfig(cmd *cobra.Command, s store.Store, app *config.App, stack *config.Stack) (pulumibridge.Stack, error) {
+// getStackWithConfig restores the config (with base merging) into a temp workdir, then returns the Pulumi stack.
+// The caller must call the returned cleanup function when done.
+func getStackWithConfig(cmd *cobra.Command, s store.Store, app *config.App, stack *config.Stack) (pulumibridge.Stack, func(), error) {
 	git.EnsurePassphrase()
-	workDir, err := git.WorkDir(app)
+
+	workDir, cleanup, err := git.PrepareWorkDir(s, app, stack)
 	if err != nil {
-		return pulumibridge.Stack{}, err
+		return pulumibridge.Stack{}, nil, fmt.Errorf("preparing workdir: %w", err)
 	}
 
-	data, err := git.BuildMergedConfig(s, app, stack)
+	ps, err := pulumibridge.GetStack(cmd.Context(), stack, workDir)
 	if err != nil {
-		return pulumibridge.Stack{}, fmt.Errorf("building merged config: %w", err)
+		cleanup()
+		return pulumibridge.Stack{}, nil, err
 	}
-	if data != nil {
-		dest := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
-		if writeErr := os.WriteFile(dest, data, 0o644); writeErr != nil {
-			return pulumibridge.Stack{}, fmt.Errorf("restoring config to workdir: %w", writeErr)
+
+	return ps, cleanup, nil
+}
+
+var (
+	schemaKey      = color.New(color.Bold, color.FgCyan)
+	schemaType     = color.New(color.FgYellow)
+	schemaDefault  = color.New(color.FgGreen)
+	schemaRequired = color.New(color.Bold, color.FgRed)
+	schemaSecret   = color.New(color.FgMagenta)
+	schemaDesc     = color.New(color.Faint)
+)
+
+func printEntries(entries []pulumibridge.ConfigSchemaEntry, depth int) {
+	// Compute the max key+type width for alignment
+	maxLeft := 0
+	for _, e := range entries {
+		w := depth*2 + len(e.Key) + 2 + len(e.Type)
+		if w > maxLeft {
+			maxLeft = w
 		}
 	}
+	if maxLeft < 30 {
+		maxLeft = 30
+	}
 
-	return pulumibridge.GetStack(cmd.Context(), stack, workDir)
+	for _, e := range entries {
+		indent := strings.Repeat("  ", depth)
+
+		// Build the left part: key + type
+		left := fmt.Sprintf("%s%s  %s", indent, e.Key, e.Type)
+
+		// Build the right part: tags + description
+		var tags []string
+		if e.HasDefault() {
+			tags = append(tags, fmt.Sprintf("default: %v", e.Default))
+		}
+		if e.Secret {
+			tags = append(tags, "secret")
+		}
+		if e.Required {
+			tags = append(tags, "required")
+		}
+
+		// Print key and type
+		schemaKey.Print(indent + e.Key)
+		fmt.Print("  ")
+		schemaType.Print(e.Type)
+
+		// Pad to align
+		padding := maxLeft - len(left)
+		if padding < 2 {
+			padding = 2
+		}
+		fmt.Print(strings.Repeat(" ", padding))
+
+		// Print tags
+		for i, tag := range tags {
+			if i > 0 {
+				fmt.Print(" ")
+			}
+			switch tag {
+			case "required":
+				schemaRequired.Printf("[%s]", tag)
+			case "secret":
+				schemaSecret.Printf("[%s]", tag)
+			default:
+				schemaDefault.Printf("[%s]", tag)
+			}
+		}
+
+		// Print description
+		if e.Description != "" {
+			if len(tags) > 0 {
+				fmt.Print("  ")
+			}
+			schemaDesc.Print(e.Description)
+		}
+		fmt.Println()
+
+		if len(e.Properties) > 0 {
+			printEntries(e.Properties, depth+1)
+		}
+	}
 }
 
 func resolveAppStack(s store.Store, target string) (*config.App, *config.Stack, error) {

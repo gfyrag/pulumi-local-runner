@@ -12,15 +12,15 @@ import (
 	"github.com/gfyrag/plr/internal/ui"
 )
 
-// isLocalRepo returns true if the repo field points to a local directory.
-func isLocalRepo(repo string) bool {
+// IsLocalRepo returns true if the repo field points to a local directory.
+func IsLocalRepo(repo string) bool {
 	return strings.HasPrefix(repo, "/") || strings.HasPrefix(repo, "./") || strings.HasPrefix(repo, "../") || strings.HasPrefix(repo, "~")
 }
 
 // RepoDir returns the local cache directory for the given app.
 // If the app repo is a local path, it returns that path directly.
 func RepoDir(app *config.App) (string, error) {
-	if isLocalRepo(app.Repo) {
+	if IsLocalRepo(app.Repo) {
 		repo := app.Repo
 		if strings.HasPrefix(repo, "~") {
 			home, err := os.UserHomeDir()
@@ -55,7 +55,7 @@ func Sync(s store.Store, app *config.App, stack *config.Stack) error {
 		return err
 	}
 
-	if isLocalRepo(app.Repo) {
+	if IsLocalRepo(app.Repo) {
 		if err := checkout(repoDir, stack); err != nil {
 			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
 		}
@@ -75,11 +75,6 @@ func Sync(s store.Store, app *config.App, stack *config.Stack) error {
 		if err := checkout(repoDir, stack); err != nil {
 			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
 		}
-	}
-
-	// Restore stack config from plr config store into workdir
-	if err := restoreStackConfig(s, app, stack); err != nil {
-		return fmt.Errorf("restoring stack config: %w", err)
 	}
 
 	return nil
@@ -119,24 +114,29 @@ func checkout(repoDir string, stack *config.Stack) error {
 	return runGit("-C", repoDir, "checkout", "--detach", target)
 }
 
-// restoreStackConfig copies the stack config from the store into the workdir.
-// If bases are configured, the config is built by merging bases then the stack's own config on top.
-func restoreStackConfig(s store.Store, app *config.App, stack *config.Stack) error {
-	data, err := BuildMergedConfig(s, app, stack)
-	if err != nil {
-		return err
-	}
-	if data == nil {
-		return nil
-	}
-
+// PrepareWorkDir writes the merged Pulumi config into the real workdir.
+// Returns the workdir path and a cleanup function that removes the config file.
+func PrepareWorkDir(s store.Store, app *config.App, stack *config.Stack) (string, func(), error) {
 	workDir, err := WorkDir(app)
 	if err != nil {
-		return err
+		return "", nil, err
 	}
 
-	dest := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
-	return os.WriteFile(dest, data, 0o644)
+	configFile := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
+
+	data, err := BuildMergedConfig(s, app, stack)
+	if err != nil {
+		return "", nil, err
+	}
+
+	if data != nil {
+		if err := os.WriteFile(configFile, data, 0o644); err != nil {
+			return "", nil, err
+		}
+	}
+
+	cleanup := func() { os.Remove(configFile) }
+	return workDir, cleanup, nil
 }
 
 // BuildMergedConfig returns the merged config bytes for a stack (bases + stack overlay).

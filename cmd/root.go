@@ -135,6 +135,15 @@ func completeAppStacks(cmd *cobra.Command, args []string, toComplete string) ([]
 	return completions, cobra.ShellCompDirectiveNoFileComp
 }
 
+// splitAppStack parses an "app/stack" argument into its two components.
+func splitAppStack(arg string) (string, string, error) {
+	parts := strings.SplitN(arg, "/", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("expected app/stack format, got %q", arg)
+	}
+	return parts[0], parts[1], nil
+}
+
 func Execute() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()

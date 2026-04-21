@@ -160,13 +160,13 @@ func init() {
 		Args:              cobra.ExactArgs(2),
 		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			srcParts := strings.SplitN(args[0], "/", 2)
-			if len(srcParts) != 2 {
-				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			srcAppName, srcStackName, err := splitAppStack(args[0])
+			if err != nil {
+				return err
 			}
-			dstParts := strings.SplitN(args[1], "/", 2)
-			if len(dstParts) != 2 {
-				return fmt.Errorf("expected app/stack format, got %q", args[1])
+			dstAppName, dstStackName, err := splitAppStack(args[1])
+			if err != nil {
+				return err
 			}
 
 			s, err := getStore()
@@ -179,26 +179,26 @@ func init() {
 				return err
 			}
 
-			srcApp, err := cfg.FindApp(srcParts[0])
+			srcApp, err := cfg.FindApp(srcAppName)
 			if err != nil {
 				return err
 			}
-			srcStack, err := srcApp.FindStack(srcParts[1])
+			srcStack, err := srcApp.FindStack(srcStackName)
 			if err != nil {
 				return err
 			}
 
-			dstApp, err := cfg.FindApp(dstParts[0])
+			dstApp, err := cfg.FindApp(dstAppName)
 			if err != nil {
 				return err
 			}
-			if _, err := dstApp.FindStack(dstParts[1]); err == nil {
-				return fmt.Errorf("stack %q already exists in app %q", dstParts[1], dstApp.Name)
+			if _, err := dstApp.FindStack(dstStackName); err == nil {
+				return fmt.Errorf("stack %q already exists in app %q", dstStackName, dstApp.Name)
 			}
 
 			// Copy stack definition with new name
 			newStack := *srcStack
-			newStack.Name = dstParts[1]
+			newStack.Name = dstStackName
 			dstApp.Stacks = append(dstApp.Stacks, newStack)
 
 			if err := s.SaveConfig(cfg); err != nil {
@@ -207,7 +207,7 @@ func init() {
 
 			// Copy Pulumi config file via store if it exists
 			if data, readErr := s.ReadStackConfig(srcApp.Name, srcStack.Name); readErr == nil && data != nil {
-				if writeErr := s.WriteStackConfig(dstApp.Name, dstParts[1], data); writeErr != nil {
+				if writeErr := s.WriteStackConfig(dstApp.Name, dstStackName, data); writeErr != nil {
 					return fmt.Errorf("copying stack config: %w", writeErr)
 				}
 				fmt.Printf("Copied stack %s → %s (config entry + Pulumi config file)\n", args[0], args[1])
@@ -226,9 +226,9 @@ func init() {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parts := strings.SplitN(args[0], "/", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			appName, stackName, err := splitAppStack(args[0])
+			if err != nil {
+				return err
 			}
 
 			s, err := getStore()
@@ -236,7 +236,7 @@ func init() {
 				return err
 			}
 
-			path, err := s.StackFilePath(parts[0], parts[1])
+			path, err := s.StackFilePath(appName, stackName)
 			if err != nil {
 				return err
 			}
@@ -262,9 +262,9 @@ func init() {
 		Args:              cobra.ExactArgs(2),
 		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parts := strings.SplitN(args[0], "/", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			appName, oldStackName, err := splitAppStack(args[0])
+			if err != nil {
+				return err
 			}
 			newName := args[1]
 
@@ -278,12 +278,12 @@ func init() {
 				return err
 			}
 
-			app, err := cfg.FindApp(parts[0])
+			app, err := cfg.FindApp(appName)
 			if err != nil {
 				return err
 			}
 
-			stack, err := app.FindStack(parts[1])
+			stack, err := app.FindStack(oldStackName)
 			if err != nil {
 				return err
 			}
@@ -333,9 +333,9 @@ func init() {
 		Args:              cobra.ExactArgs(1),
 		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			parts := strings.SplitN(args[0], "/", 2)
-			if len(parts) != 2 {
-				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			appName, stackName, err := splitAppStack(args[0])
+			if err != nil {
+				return err
 			}
 
 			s, err := getStore()
@@ -348,20 +348,20 @@ func init() {
 				return err
 			}
 
-			app, err := cfg.FindApp(parts[0])
+			app, err := cfg.FindApp(appName)
 			if err != nil {
 				return err
 			}
 
 			idx := -1
 			for i, st := range app.Stacks {
-				if st.Name == parts[1] {
+				if st.Name == stackName {
 					idx = i
 					break
 				}
 			}
 			if idx == -1 {
-				return fmt.Errorf("stack %q not found in app %q", parts[1], app.Name)
+				return fmt.Errorf("stack %q not found in app %q", stackName, app.Name)
 			}
 
 			app.Stacks = append(app.Stacks[:idx], app.Stacks[idx+1:]...)

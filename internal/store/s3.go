@@ -206,6 +206,8 @@ func (s *S3Store) SaveConfig(cfg *config.Config) error {
 		for _, stack := range app.Stacks {
 			var existing config.StackFile
 			if existingData, getErr := s.getObject(ctx, s.stackFileKey(app.Name, stack.Name)); getErr == nil && existingData != nil {
+				// Unmarshal error intentionally ignored: if the existing file is
+				// corrupt we simply start fresh with an empty StackFile.
 				yaml.Unmarshal(existingData, &existing)
 			}
 

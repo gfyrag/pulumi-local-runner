@@ -145,10 +145,15 @@ func Refresh(ctx context.Context, stack auto.Stack, verbose bool) error {
 }
 
 func SetConfig(ctx context.Context, stack auto.Stack, key, value string, secret bool) error {
-	return stack.SetConfig(ctx, key, auto.ConfigValue{
+	cv := auto.ConfigValue{
 		Value:  value,
 		Secret: secret,
-	})
+	}
+	// If the key contains a dot, treat it as a path (e.g., spec.image.tag)
+	if strings.Contains(key, ".") {
+		return stack.SetConfigWithOptions(ctx, key, cv, &auto.ConfigOptions{Path: true})
+	}
+	return stack.SetConfig(ctx, key, cv)
 }
 
 func GetConfig(ctx context.Context, stack auto.Stack, key string) (auto.ConfigValue, error) {

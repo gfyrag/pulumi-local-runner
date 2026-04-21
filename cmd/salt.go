@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var saltCmd = &cobra.Command{
@@ -85,14 +86,12 @@ func init() {
 				return fmt.Errorf("stack %s/%s has no config", app.Name, stack.Name)
 			}
 
-			// Extract encryptionsalt from the Pulumi config
-			salt := ""
-			for _, line := range splitLines(data) {
-				if len(line) > 16 && line[:16] == "encryptionsalt: " {
-					salt = line[16:]
-					break
-				}
+			// Extract encryptionsalt from the Pulumi config (which is YAML)
+			var parsed map[string]any
+			if err := yaml.Unmarshal(data, &parsed); err != nil {
+				return fmt.Errorf("parsing stack config: %w", err)
 			}
+			salt, _ := parsed["encryptionsalt"].(string)
 
 			if salt == "" {
 				return fmt.Errorf("stack %s/%s has no encryption salt", app.Name, stack.Name)
@@ -106,19 +105,4 @@ func init() {
 			return nil
 		},
 	})
-}
-
-func splitLines(data []byte) []string {
-	var lines []string
-	start := 0
-	for i, b := range data {
-		if b == '\n' {
-			lines = append(lines, string(data[start:i]))
-			start = i + 1
-		}
-	}
-	if start < len(data) {
-		lines = append(lines, string(data[start:]))
-	}
-	return lines
 }

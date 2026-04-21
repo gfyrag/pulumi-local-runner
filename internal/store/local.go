@@ -154,6 +154,8 @@ func (s *LocalStore) SaveConfig(cfg *config.Config) error {
 			// Read existing file to preserve config
 			var existing config.StackFile
 			if existingData, readErr := os.ReadFile(stackPath); readErr == nil {
+				// Unmarshal error intentionally ignored: if the existing file is
+				// corrupt we simply start fresh with an empty StackFile.
 				yaml.Unmarshal(existingData, &existing)
 			}
 

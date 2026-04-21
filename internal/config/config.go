@@ -86,8 +86,6 @@ func (c *Config) Validate() error {
 		}
 		appNames[app.Name] = true
 
-
-
 		stackNames := make(map[string]bool)
 		for j, stack := range app.Stacks {
 			if stack.Name == "" {

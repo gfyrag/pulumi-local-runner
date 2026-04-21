@@ -2,9 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/fatih/color"
 	"github.com/gfyrag/plr/internal/config"
+	"github.com/gfyrag/plr/internal/git"
 	"github.com/spf13/cobra"
 )
 
@@ -47,6 +50,10 @@ func init() {
 				Name: name,
 				Repo: repo,
 				Path: path,
+			}
+
+			if err := validateAppPaths(&app); err != nil {
+				return err
 			}
 
 			cfg.Apps = append(cfg.Apps, app)
@@ -131,6 +138,10 @@ func init() {
 				app.Path = setPath
 			}
 
+			if err := validateAppPaths(app); err != nil {
+				return err
+			}
+
 			if err := s.SaveConfig(cfg); err != nil {
 				return err
 			}
@@ -183,4 +194,32 @@ func init() {
 			return nil
 		},
 	})
+}
+
+// validateAppPaths checks that repo and path exist for local repos.
+func validateAppPaths(app *config.App) error {
+	if !git.IsLocalRepo(app.Repo) {
+		return nil
+	}
+
+	repoDir, err := git.RepoDir(app)
+	if err != nil {
+		return err
+	}
+
+	if info, err := os.Stat(repoDir); err != nil || !info.IsDir() {
+		return fmt.Errorf("repo directory does not exist: %s", repoDir)
+	}
+
+	workDir := filepath.Join(repoDir, app.Path)
+	if info, err := os.Stat(workDir); err != nil || !info.IsDir() {
+		return fmt.Errorf("path %q does not exist in repo %s", app.Path, repoDir)
+	}
+
+	pulumiYaml := filepath.Join(workDir, "Pulumi.yaml")
+	if _, err := os.Stat(pulumiYaml); err != nil {
+		return fmt.Errorf("no Pulumi.yaml found at %s", workDir)
+	}
+
+	return nil
 }
