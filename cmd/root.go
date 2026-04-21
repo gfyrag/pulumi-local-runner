@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/gfyrag/plr/internal/engine"
@@ -17,9 +18,10 @@ var (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "plr",
-	Short: "Pulumi Local Runner - run Pulumi apps from remote repositories",
-	Long:  "plr clones remote git repositories containing Pulumi programs and runs them locally.",
+	Use:           "plr",
+	Short:         "Pulumi Local Runner - run Pulumi apps from remote repositories",
+	Long:          "plr clones remote git repositories containing Pulumi programs and runs them locally.",
+	SilenceUsage: true,
 }
 
 func init() {
@@ -134,7 +136,10 @@ func completeAppStacks(cmd *cobra.Command, args []string, toComplete string) ([]
 }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

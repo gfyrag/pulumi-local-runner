@@ -17,4 +17,29 @@ type Store interface {
 
 	// WriteStackConfig writes a Pulumi stack config file.
 	WriteStackConfig(appName, stackName string, data []byte) error
+
+	// StackFilePath returns the filesystem path to a stack's definition file.
+	// For remote stores, this downloads to a temp file and returns that path.
+	// The caller should call SaveStackFile after editing.
+	StackFilePath(appName, stackName string) (string, error)
+
+	// ReadBaseConfig reads a named base config template.
+	// Returns nil, nil if it does not exist.
+	ReadBaseConfig(name string) ([]byte, error)
+
+	// WriteBaseConfig writes a named base config template.
+	WriteBaseConfig(name string, data []byte) error
+
+	// ListBases returns the names of all stored bases.
+	ListBases() ([]string, error)
+
+	// DeleteBaseConfig removes a named base.
+	DeleteBaseConfig(name string) error
+
+	// ReadEncryptionSalt returns the global encryption salt.
+	// Returns "", nil if not set.
+	ReadEncryptionSalt() (string, error)
+
+	// WriteEncryptionSalt stores the global encryption salt.
+	WriteEncryptionSalt(salt string) error
 }

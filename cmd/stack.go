@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/fatih/color"
@@ -25,7 +27,7 @@ func init() {
 
 	// stack add
 	var branch, ref, org string
-	var dependsOn []string
+	var dependsOn, bases []string
 	addCmd := &cobra.Command{
 		Use:               "add <app> <name>",
 		Short:             "Add a stack to an app",
@@ -62,6 +64,7 @@ func init() {
 				Ref:       ref,
 				DependsOn: dependsOn,
 				Org:       org,
+				Bases:     bases,
 			}
 
 			app.Stacks = append(app.Stacks, stack)
@@ -76,6 +79,7 @@ func init() {
 	addCmd.Flags().StringVar(&ref, "ref", "", "Git ref (tag/commit) to pin")
 	addCmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "Dependencies (app/stack format)")
 	addCmd.Flags().StringVar(&org, "org", "", "Pulumi Cloud organization (enables fully qualified stack names)")
+	addCmd.Flags().StringSliceVar(&bases, "bases", nil, "Base configs to apply (ordered)")
 	stackCmd.AddCommand(addCmd)
 
 	// stack list
@@ -137,6 +141,9 @@ func init() {
 					}
 					if len(st.DependsOn) > 0 {
 						stackMeta.Printf("  deps:%s", strings.Join(st.DependsOn, ","))
+					}
+					if len(st.Bases) > 0 {
+						stackMeta.Printf("  bases:%s", strings.Join(st.Bases, ","))
 					}
 					fmt.Println()
 				}
@@ -209,6 +216,41 @@ func init() {
 			}
 
 			return nil
+		},
+	})
+
+	// stack edit
+	stackCmd.AddCommand(&cobra.Command{
+		Use:               "edit <app/stack>",
+		Short:             "Open the stack definition in your editor",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeAppStacks,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			parts := strings.SplitN(args[0], "/", 2)
+			if len(parts) != 2 {
+				return fmt.Errorf("expected app/stack format, got %q", args[0])
+			}
+
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			path, err := s.StackFilePath(parts[0], parts[1])
+			if err != nil {
+				return err
+			}
+
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				editor = "vi"
+			}
+
+			c := exec.Command(editor, path)
+			c.Stdin = os.Stdin
+			c.Stdout = os.Stdout
+			c.Stderr = os.Stderr
+			return c.Run()
 		},
 	})
 

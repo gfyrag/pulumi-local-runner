@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/gfyrag/plr/internal/config"
@@ -95,12 +96,15 @@ func TestLocalStoreDefaultPath(t *testing.T) {
 	}
 }
 
-func TestLocalStoreInvalidYAML(t *testing.T) {
+func TestLocalStoreInvalidAppYAML(t *testing.T) {
 	dir := t.TempDir()
 	s := NewLocalStore(dir)
 
-	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, []byte("{{invalid yaml"), 0o644); err != nil {
+	appDir := filepath.Join(dir, "apps", "badapp")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(appDir, "app.yaml"), []byte("{{invalid yaml"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,8 +117,17 @@ func TestLocalStoreInvalidYAML(t *testing.T) {
 func TestLocalStoreStackConfigRoundtrip(t *testing.T) {
 	s := NewLocalStore(t.TempDir())
 
-	data := []byte("config:\n  key: value\n")
+	// First create the stack file so WriteStackConfig has something to merge into
+	cfg := &config.Config{
+		Apps: []config.App{
+			{Name: "myapp", Repo: "r", Stacks: []config.Stack{{Name: "dev"}}},
+		},
+	}
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 
+	data := []byte("config:\n  key: value\n")
 	if err := s.WriteStackConfig("myapp", "dev", data); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -123,8 +136,10 @@ func TestLocalStoreStackConfigRoundtrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if string(got) != string(data) {
-		t.Errorf("got %q, want %q", got, data)
+
+	// Verify the config key is present in the output
+	if !strings.Contains(string(got), "key: value") {
+		t.Errorf("expected config key in output, got %q", got)
 	}
 }
 
@@ -151,5 +166,105 @@ func TestNewDefaultLocalStore(t *testing.T) {
 
 	if s.configDir != filepath.Join(dir, "plr") {
 		t.Errorf("configDir = %q, want %q", s.configDir, filepath.Join(dir, "plr"))
+	}
+}
+
+func TestLocalStoreDeletesRemovedStacks(t *testing.T) {
+	s := NewLocalStore(t.TempDir())
+
+	// Save with two stacks
+	cfg := &config.Config{
+		Apps: []config.App{
+			{
+				Name: "myapp",
+				Repo: "git@github.com:org/myapp.git",
+				Stacks: []config.Stack{
+					{Name: "dev", Branch: "main"},
+					{Name: "prod", Ref: "v1.0.0"},
+				},
+			},
+		},
+	}
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// Remove one stack and save again
+	cfg.Apps[0].Stacks = cfg.Apps[0].Stacks[:1]
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := s.LoadConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(loaded.Apps[0].Stacks) != 1 {
+		t.Errorf("expected 1 stack, got %d", len(loaded.Apps[0].Stacks))
+	}
+}
+
+func TestLocalStoreDeletesRemovedApps(t *testing.T) {
+	s := NewLocalStore(t.TempDir())
+
+	cfg := &config.Config{
+		Apps: []config.App{
+			{Name: "app1", Repo: "r1", Stacks: []config.Stack{{Name: "dev"}}},
+			{Name: "app2", Repo: "r2", Stacks: []config.Stack{{Name: "dev"}}},
+		},
+	}
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	// Remove app2
+	cfg.Apps = cfg.Apps[:1]
+	if err := s.SaveConfig(cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+
+	loaded, err := s.LoadConfig()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(loaded.Apps) != 1 {
+		t.Errorf("expected 1 app, got %d", len(loaded.Apps))
+	}
+}
+
+func TestLocalStoreBasesRoundtrip(t *testing.T) {
+	s := NewLocalStore(t.TempDir())
+
+	data := []byte("config:\n  key: value\n")
+	if err := s.WriteBaseConfig("mybase", data); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	got, err := s.ReadBaseConfig("mybase")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(got) != string(data) {
+		t.Errorf("got %q, want %q", got, data)
+	}
+
+	names, err := s.ListBases()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(names) != 1 || names[0] != "mybase" {
+		t.Errorf("list = %v, want [mybase]", names)
+	}
+
+	if err := s.DeleteBaseConfig("mybase"); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+
+	got, err = s.ReadBaseConfig("mybase")
+	if err != nil {
+		t.Fatalf("read after delete: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil after delete, got %q", got)
 	}
 }

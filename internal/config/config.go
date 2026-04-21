@@ -13,6 +13,7 @@ type Stack struct {
 	DependsOn []string `yaml:"dependsOn,omitempty"`
 	Org       string   `yaml:"org,omitempty"`
 	Project   string   `yaml:"project,omitempty"`
+	Bases     []string `yaml:"bases,omitempty"`
 }
 
 type App struct {
@@ -24,6 +25,26 @@ type App struct {
 
 type Config struct {
 	Apps []App `yaml:"apps"`
+}
+
+// AppFile is the on-disk representation of an app (app.yaml).
+// The app name is derived from the directory name.
+type AppFile struct {
+	Repo string `yaml:"repo"`
+	Path string `yaml:"path,omitempty"`
+}
+
+// StackFile is the on-disk representation of a stack (<stack>.yaml).
+// The stack name is derived from the file name.
+// It combines the stack definition and Pulumi config in a single file.
+type StackFile struct {
+	Branch    string         `yaml:"branch,omitempty"`
+	Ref       string         `yaml:"ref,omitempty"`
+	DependsOn []string       `yaml:"dependsOn,omitempty"`
+	Org       string         `yaml:"org,omitempty"`
+	Project   string         `yaml:"project,omitempty"`
+	Bases     []string       `yaml:"bases,omitempty"`
+	Config    map[string]any `yaml:"config,omitempty"`
 }
 
 func ConfigDir() (string, error) {

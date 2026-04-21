@@ -101,6 +101,47 @@ func init() {
 		},
 	})
 
+	// app set
+	var setRepo, setPath string
+	setCmd := &cobra.Command{
+		Use:               "set <name>",
+		Short:             "Update an app's repo or path",
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: completeApps,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := s.LoadConfig()
+			if err != nil {
+				return err
+			}
+
+			app, err := cfg.FindApp(args[0])
+			if err != nil {
+				return err
+			}
+
+			if cmd.Flags().Changed("repo") {
+				app.Repo = setRepo
+			}
+			if cmd.Flags().Changed("path") {
+				app.Path = setPath
+			}
+
+			if err := s.SaveConfig(cfg); err != nil {
+				return err
+			}
+			fmt.Printf("Updated app %q\n", args[0])
+			return nil
+		},
+	}
+	setCmd.Flags().StringVar(&setRepo, "repo", "", "Git repository URL")
+	setCmd.Flags().StringVar(&setPath, "path", "", "Subdirectory within the repo")
+	appCmd.AddCommand(setCmd)
+
 	// app list
 	appCmd.AddCommand(&cobra.Command{
 		Use:     "list",

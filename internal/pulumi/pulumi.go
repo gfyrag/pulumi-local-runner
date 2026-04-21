@@ -86,7 +86,7 @@ func Up(ctx context.Context, stack auto.Stack, verbose bool) error {
 			optup.ProgressStreams(os.Stdout),
 			optup.ErrorProgressStreams(os.Stderr),
 		)
-		return err
+		return compactError(err)
 	}
 	ch := make(chan events.EngineEvent)
 	wg := streamEvents(ch)
@@ -103,7 +103,7 @@ func Preview(ctx context.Context, stack auto.Stack, verbose bool) error {
 			optpreview.ErrorProgressStreams(os.Stderr),
 			optpreview.Diff(),
 		)
-		return err
+		return compactError(err)
 	}
 	ch := make(chan events.EngineEvent)
 	wg := streamEvents(ch)
@@ -119,7 +119,7 @@ func Destroy(ctx context.Context, stack auto.Stack, verbose bool) error {
 			optdestroy.ProgressStreams(os.Stdout),
 			optdestroy.ErrorProgressStreams(os.Stderr),
 		)
-		return err
+		return compactError(err)
 	}
 	ch := make(chan events.EngineEvent)
 	wg := streamEvents(ch)
@@ -135,7 +135,7 @@ func Refresh(ctx context.Context, stack auto.Stack, verbose bool) error {
 			optrefresh.ProgressStreams(os.Stdout),
 			optrefresh.ErrorProgressStreams(os.Stderr),
 		)
-		return err
+		return compactError(err)
 	}
 	ch := make(chan events.EngineEvent)
 	wg := streamEvents(ch)

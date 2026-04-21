@@ -120,9 +120,9 @@ func checkout(repoDir string, stack *config.Stack) error {
 }
 
 // restoreStackConfig copies the stack config from the store into the workdir.
-// If no stored config exists, this is a no-op.
+// If bases are configured, the config is built by merging bases then the stack's own config on top.
 func restoreStackConfig(s store.Store, app *config.App, stack *config.Stack) error {
-	data, err := s.ReadStackConfig(app.Name, stack.Name)
+	data, err := BuildMergedConfig(s, app, stack)
 	if err != nil {
 		return err
 	}
@@ -137,6 +137,61 @@ func restoreStackConfig(s store.Store, app *config.App, stack *config.Stack) err
 
 	dest := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
 	return os.WriteFile(dest, data, 0o644)
+}
+
+// BuildMergedConfig returns the merged config bytes for a stack (bases + stack overlay).
+// If a global encryption salt is set, it overrides any per-stack salt.
+// Returns nil if no config exists and no bases are configured.
+func BuildMergedConfig(s store.Store, app *config.App, stack *config.Stack) ([]byte, error) {
+	stackData, err := s.ReadStackConfig(app.Name, stack.Name)
+	if err != nil {
+		return nil, err
+	}
+
+	globalSalt, err := s.ReadEncryptionSalt()
+	if err != nil {
+		return nil, fmt.Errorf("reading global encryption salt: %w", err)
+	}
+
+	if globalSalt == "" {
+		globalSalt, err = GenerateEncryptionSalt()
+		if err != nil {
+			return nil, fmt.Errorf("generating encryption salt: %w", err)
+		}
+		if err := s.WriteEncryptionSalt(globalSalt); err != nil {
+			return nil, fmt.Errorf("saving encryption salt: %w", err)
+		}
+		ui.Info("Generated global encryption salt")
+	}
+
+	if len(stack.Bases) == 0 {
+		if globalSalt != "" {
+			return injectSalt(stackData, globalSalt)
+		}
+		return stackData, nil
+	}
+
+	var bases [][]byte
+	for _, baseName := range stack.Bases {
+		baseData, err := s.ReadBaseConfig(baseName)
+		if err != nil {
+			return nil, fmt.Errorf("reading base %q: %w", baseName, err)
+		}
+		if baseData == nil {
+			return nil, fmt.Errorf("base %q not found", baseName)
+		}
+		bases = append(bases, baseData)
+	}
+
+	data, err := mergeConfigs(bases, stackData)
+	if err != nil {
+		return nil, err
+	}
+
+	if globalSalt != "" {
+		return injectSalt(data, globalSalt)
+	}
+	return data, nil
 }
 
 // SaveStackConfig copies the stack config from the workdir back to the store.

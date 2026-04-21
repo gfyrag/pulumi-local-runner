@@ -6,9 +6,10 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(&cobra.Command{
+	var refresh bool
+	previewCmd := &cobra.Command{
 		Use:               "preview [app[/stack]...]",
-		Aliases:           []string{"pre"},
+		Aliases:           []string{"pre", "diff"},
 		Short:             "Preview stack changes",
 		Args:              cobra.ArbitraryArgs,
 		ValidArgsFunction: completeTargets,
@@ -25,7 +26,14 @@ func init() {
 			if err != nil {
 				return err
 			}
+			if refresh {
+				if err := engine.Run(cmd.Context(), s, cfg, targets, engine.OpRefresh, runOptions()); err != nil {
+					return err
+				}
+			}
 			return engine.Run(cmd.Context(), s, cfg, targets, engine.OpPreview, runOptions())
 		},
-	})
+	}
+	previewCmd.Flags().BoolVarP(&refresh, "refresh", "r", false, "Refresh state from provider before preview")
+	rootCmd.AddCommand(previewCmd)
 }

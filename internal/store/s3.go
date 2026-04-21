@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -70,12 +71,16 @@ func (s *S3Store) key(parts ...string) string {
 	return key
 }
 
-func (s *S3Store) configKey() string {
-	return s.key("config.yaml")
+func (s *S3Store) appFileKey(appName string) string {
+	return s.key("apps", appName, "app.yaml")
+}
+
+func (s *S3Store) stackFileKey(appName, stackName string) string {
+	return s.key("apps", appName, fmt.Sprintf("%s.yaml", stackName))
 }
 
 func (s *S3Store) stackConfigKey(appName, stackName string) string {
-	return s.key("stacks", appName, fmt.Sprintf("Pulumi.%s.yaml", stackName))
+	return s.stackFileKey(appName, stackName)
 }
 
 func (s *S3Store) getObject(ctx context.Context, key string) ([]byte, error) {
@@ -109,36 +114,120 @@ func (s *S3Store) putObject(ctx context.Context, key string, data []byte) error 
 }
 
 func (s *S3Store) LoadConfig() (*config.Config, error) {
-	data, err := s.getObject(context.Background(), s.configKey())
+	ctx := context.Background()
+	prefix := s.key("apps") + "/"
+
+	out, err := s.client.ListObjectsV2(ctx, &s3.ListObjectsV2Input{
+		Bucket: aws.String(s.bucket),
+		Prefix: aws.String(prefix),
+	})
 	if err != nil {
-		return nil, fmt.Errorf("reading config from S3: %w", err)
+		return nil, fmt.Errorf("listing apps from S3: %w", err)
 	}
-	if data == nil {
-		return &config.Config{}, nil
+
+	// Group objects by app name
+	type objectEntry struct {
+		key  string
+		name string // filename within the app dir
+	}
+	appObjects := make(map[string][]objectEntry)
+	for _, obj := range out.Contents {
+		rel := strings.TrimPrefix(*obj.Key, prefix)
+		parts := strings.SplitN(rel, "/", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		appObjects[parts[0]] = append(appObjects[parts[0]], objectEntry{key: *obj.Key, name: parts[1]})
 	}
 
 	var cfg config.Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parsing config: %w", err)
-	}
+	for appName, objects := range appObjects {
+		var app config.App
+		app.Name = appName
 
-	for i := range cfg.Apps {
-		if cfg.Apps[i].Path == "" {
-			cfg.Apps[i].Path = "."
+		for _, obj := range objects {
+			data, err := s.getObject(ctx, obj.key)
+			if err != nil {
+				return nil, fmt.Errorf("reading %s: %w", obj.key, err)
+			}
+			if data == nil {
+				continue
+			}
+
+			if obj.name == "app.yaml" {
+				var af config.AppFile
+				if err := yaml.Unmarshal(data, &af); err != nil {
+					return nil, fmt.Errorf("parsing app %q: %w", appName, err)
+				}
+				app.Repo = af.Repo
+				app.Path = af.Path
+				if app.Path == "" {
+					app.Path = "."
+				}
+			} else if strings.HasSuffix(obj.name, ".yaml") {
+				stackName := strings.TrimSuffix(obj.name, ".yaml")
+				var sf config.StackFile
+				if err := yaml.Unmarshal(data, &sf); err != nil {
+					return nil, fmt.Errorf("parsing stack %s/%s: %w", appName, stackName, err)
+				}
+				app.Stacks = append(app.Stacks, config.Stack{
+					Name:      stackName,
+					Branch:    sf.Branch,
+					Ref:       sf.Ref,
+					DependsOn: sf.DependsOn,
+					Org:       sf.Org,
+					Project:   sf.Project,
+					Bases:     sf.Bases,
+				})
+			}
 		}
+
+		cfg.Apps = append(cfg.Apps, app)
 	}
 
 	return &cfg, nil
 }
 
 func (s *S3Store) SaveConfig(cfg *config.Config) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
+	ctx := context.Background()
+
+	for _, app := range cfg.Apps {
+		// Write app.yaml
+		af := config.AppFile{Repo: app.Repo, Path: app.Path}
+		data, err := yaml.Marshal(af)
+		if err != nil {
+			return fmt.Errorf("marshaling app %q: %w", app.Name, err)
+		}
+		if err := s.putObject(ctx, s.appFileKey(app.Name), data); err != nil {
+			return fmt.Errorf("writing app %q to S3: %w", app.Name, err)
+		}
+
+		// Write stack files, preserving existing config
+		for _, stack := range app.Stacks {
+			var existing config.StackFile
+			if existingData, getErr := s.getObject(ctx, s.stackFileKey(app.Name, stack.Name)); getErr == nil && existingData != nil {
+				yaml.Unmarshal(existingData, &existing)
+			}
+
+			sf := config.StackFile{
+				Branch:    stack.Branch,
+				Ref:       stack.Ref,
+				DependsOn: stack.DependsOn,
+				Org:       stack.Org,
+				Project:   stack.Project,
+				Bases:     stack.Bases,
+				Config:    existing.Config,
+			}
+			data, err := yaml.Marshal(sf)
+			if err != nil {
+				return fmt.Errorf("marshaling stack %s/%s: %w", app.Name, stack.Name, err)
+			}
+			if err := s.putObject(ctx, s.stackFileKey(app.Name, stack.Name), data); err != nil {
+				return fmt.Errorf("writing stack %s/%s to S3: %w", app.Name, stack.Name, err)
+			}
+		}
 	}
-	if err := s.putObject(context.Background(), s.configKey(), data); err != nil {
-		return fmt.Errorf("writing config to S3: %w", err)
-	}
+
 	return nil
 }
 
@@ -147,12 +236,123 @@ func (s *S3Store) ReadStackConfig(appName, stackName string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reading stack config from S3: %w", err)
 	}
-	return data, nil
+	if data == nil {
+		return nil, nil
+	}
+
+	var sf config.StackFile
+	if err := yaml.Unmarshal(data, &sf); err != nil {
+		return nil, fmt.Errorf("parsing stack file: %w", err)
+	}
+
+	if sf.Config == nil {
+		return nil, nil
+	}
+
+	pulumiCfg := map[string]any{"config": sf.Config}
+	return yaml.Marshal(pulumiCfg)
 }
 
 func (s *S3Store) WriteStackConfig(appName, stackName string, data []byte) error {
-	if err := s.putObject(context.Background(), s.stackConfigKey(appName, stackName), data); err != nil {
+	ctx := context.Background()
+
+	var incoming map[string]any
+	if err := yaml.Unmarshal(data, &incoming); err != nil {
+		return fmt.Errorf("parsing incoming config: %w", err)
+	}
+
+	// Read existing file to preserve definition fields
+	var sf config.StackFile
+	if existing, err := s.getObject(ctx, s.stackConfigKey(appName, stackName)); err == nil && existing != nil {
+		yaml.Unmarshal(existing, &sf)
+	}
+
+	if cfgVal, ok := incoming["config"]; ok {
+		if cfgMap, ok := cfgVal.(map[string]any); ok {
+			sf.Config = cfgMap
+		}
+	} else {
+		sf.Config = nil
+	}
+
+	out, err := yaml.Marshal(sf)
+	if err != nil {
+		return fmt.Errorf("marshaling stack file: %w", err)
+	}
+
+	if err := s.putObject(ctx, s.stackConfigKey(appName, stackName), out); err != nil {
 		return fmt.Errorf("writing stack config to S3: %w", err)
+	}
+	return nil
+}
+
+func (s *S3Store) StackFilePath(appName, stackName string) (string, error) {
+	return "", fmt.Errorf("stack edit is not supported with S3 backend; use stack show/import instead")
+}
+
+func (s *S3Store) baseConfigKey(name string) string {
+	return s.key("bases", fmt.Sprintf("%s.yaml", name))
+}
+
+func (s *S3Store) ReadBaseConfig(name string) ([]byte, error) {
+	data, err := s.getObject(context.Background(), s.baseConfigKey(name))
+	if err != nil {
+		return nil, fmt.Errorf("reading base config from S3: %w", err)
+	}
+	return data, nil
+}
+
+func (s *S3Store) WriteBaseConfig(name string, data []byte) error {
+	if err := s.putObject(context.Background(), s.baseConfigKey(name), data); err != nil {
+		return fmt.Errorf("writing base config to S3: %w", err)
+	}
+	return nil
+}
+
+func (s *S3Store) ListBases() ([]string, error) {
+	prefix := s.key("bases") + "/"
+	out, err := s.client.ListObjectsV2(context.Background(), &s3.ListObjectsV2Input{
+		Bucket: aws.String(s.bucket),
+		Prefix: aws.String(prefix),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing bases from S3: %w", err)
+	}
+	var names []string
+	for _, obj := range out.Contents {
+		key := strings.TrimPrefix(*obj.Key, prefix)
+		if strings.HasSuffix(key, ".yaml") {
+			names = append(names, strings.TrimSuffix(key, ".yaml"))
+		}
+	}
+	return names, nil
+}
+
+func (s *S3Store) ReadEncryptionSalt() (string, error) {
+	data, err := s.getObject(context.Background(), s.key("encryptionsalt"))
+	if err != nil {
+		return "", fmt.Errorf("reading encryption salt from S3: %w", err)
+	}
+	if data == nil {
+		return "", nil
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+func (s *S3Store) WriteEncryptionSalt(salt string) error {
+	if err := s.putObject(context.Background(), s.key("encryptionsalt"), []byte(salt+"\n")); err != nil {
+		return fmt.Errorf("writing encryption salt to S3: %w", err)
+	}
+	return nil
+}
+
+func (s *S3Store) DeleteBaseConfig(name string) error {
+	_, err := s.client.DeleteObject(context.Background(), &s3.DeleteObjectInput{
+		Bucket: aws.String(s.bucket),
+		Key:    aws.String(s.baseConfigKey(name)),
+	})
+	if err != nil {
+		return fmt.Errorf("deleting base config from S3: %w", err)
 	}
 	return nil
 }

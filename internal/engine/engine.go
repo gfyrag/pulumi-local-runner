@@ -135,6 +135,9 @@ func Run(ctx context.Context, s store.Store, cfg *config.Config, targets []Targe
 func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts RunOptions) error {
 	ui.Header(t.Key(), op.String())
 
+	// Ensure PULUMI_CONFIG_PASSPHRASE is set so Pulumi can decrypt secrets
+	git.EnsurePassphrase()
+
 	if err := git.Sync(s, t.App, t.Stack); err != nil {
 		return fmt.Errorf("git sync: %w", err)
 	}
@@ -192,8 +195,12 @@ func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts Run
 	close(done)
 
 	// Save stack config back to config store (captures newly set secrets, etc.)
-	if err := git.SaveStackConfig(s, t.App, t.Stack); err != nil {
-		ui.Warn("Failed to save stack config: %s", err)
+	// Skip when bases are configured, since the workdir file is a merged result
+	// that would pollute the stack's own config with base values.
+	if len(t.Stack.Bases) == 0 {
+		if err := git.SaveStackConfig(s, t.App, t.Stack); err != nil {
+			ui.Warn("Failed to save stack config: %s", err)
+		}
 	}
 
 	return pulumiErr
