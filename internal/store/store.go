@@ -36,10 +36,10 @@ type Store interface {
 	// DeleteBaseConfig removes a named base.
 	DeleteBaseConfig(name string) error
 
-	// ReadEncryptionSalt returns the global encryption salt.
+	// ReadActiveEnv returns the currently active environment.
 	// Returns "", nil if not set.
-	ReadEncryptionSalt() (string, error)
+	ReadActiveEnv() (string, error)
 
-	// WriteEncryptionSalt stores the global encryption salt.
-	WriteEncryptionSalt(salt string) error
+	// WriteActiveEnv stores the active environment.
+	WriteActiveEnv(env string) error
 }

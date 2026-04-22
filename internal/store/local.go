@@ -106,8 +106,13 @@ func (s *LocalStore) LoadConfig() (*config.Config, error) {
 				return nil, fmt.Errorf("parsing stack %s/%s: %w", appName, stackName, err)
 			}
 
+			env := sf.Env
+			if env == "" {
+				env = "default"
+			}
 			app.Stacks = append(app.Stacks, config.Stack{
 				Name:      stackName,
+				Env:       env,
 				Branch:    sf.Branch,
 				Ref:       sf.Ref,
 				DependsOn: sf.DependsOn,
@@ -160,6 +165,7 @@ func (s *LocalStore) SaveConfig(cfg *config.Config) error {
 			}
 
 			sf := config.StackFile{
+				Env:       stack.Env,
 				Branch:    stack.Branch,
 				Ref:       stack.Ref,
 				DependsOn: stack.DependsOn,
@@ -326,12 +332,12 @@ func (s *LocalStore) DeleteBaseConfig(name string) error {
 	return err
 }
 
-func (s *LocalStore) encryptionSaltPath() string {
-	return filepath.Join(s.configDir, "encryptionsalt")
+func (s *LocalStore) activeEnvPath() string {
+	return filepath.Join(s.configDir, "active-env")
 }
 
-func (s *LocalStore) ReadEncryptionSalt() (string, error) {
-	data, err := os.ReadFile(s.encryptionSaltPath())
+func (s *LocalStore) ReadActiveEnv() (string, error) {
+	data, err := os.ReadFile(s.activeEnvPath())
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil
@@ -341,9 +347,9 @@ func (s *LocalStore) ReadEncryptionSalt() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func (s *LocalStore) WriteEncryptionSalt(salt string) error {
+func (s *LocalStore) WriteActiveEnv(env string) error {
 	if err := os.MkdirAll(s.configDir, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(s.encryptionSaltPath(), []byte(salt+"\n"), 0o644)
+	return os.WriteFile(s.activeEnvPath(), []byte(env+"\n"), 0o644)
 }

@@ -8,6 +8,7 @@ import (
 
 type Stack struct {
 	Name      string   `yaml:"name"`
+	Env       string   `yaml:"env,omitempty"`
 	Branch    string   `yaml:"branch,omitempty"`
 	Ref       string   `yaml:"ref,omitempty"`
 	DependsOn []string `yaml:"dependsOn,omitempty"`
@@ -38,6 +39,7 @@ type AppFile struct {
 // The stack name is derived from the file name.
 // It combines the stack definition and Pulumi config in a single file.
 type StackFile struct {
+	Env       string         `yaml:"env,omitempty"`
 	Branch    string         `yaml:"branch,omitempty"`
 	Ref       string         `yaml:"ref,omitempty"`
 	DependsOn []string       `yaml:"dependsOn,omitempty"`

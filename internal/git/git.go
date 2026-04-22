@@ -115,32 +115,39 @@ func checkout(repoDir string, stack *config.Stack) error {
 }
 
 // PrepareWorkDir writes the merged Pulumi config into the real workdir.
-// Returns the workdir path and a cleanup function that removes the config file.
-func PrepareWorkDir(s store.Store, app *config.App, stack *config.Stack) (string, func(), error) {
+// Secret keys (from schema) are extracted from the YAML and returned separately
+// to be set via the Automation API.
+// Returns the workdir path, a cleanup function, and extracted secrets.
+func PrepareWorkDir(s store.Store, app *config.App, stack *config.Stack, secretKeys map[string]bool) (string, func(), []SecretValue, error) {
 	workDir, err := WorkDir(app)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
 	configFile := filepath.Join(workDir, fmt.Sprintf("Pulumi.%s.yaml", stack.Name))
 
 	data, err := BuildMergedConfig(s, app, stack)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 
+	// Extract plaintext secrets so they can be set via Automation API
+	var secrets []SecretValue
 	if data != nil {
+		data, secrets, err = ExtractSecretValues(data, secretKeys)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("extracting secrets: %w", err)
+		}
 		if err := os.WriteFile(configFile, data, 0o644); err != nil {
-			return "", nil, err
+			return "", nil, nil, err
 		}
 	}
 
 	cleanup := func() { os.Remove(configFile) }
-	return workDir, cleanup, nil
+	return workDir, cleanup, secrets, nil
 }
 
 // BuildMergedConfig returns the merged config bytes for a stack (bases + stack overlay).
-// If a global encryption salt is set, it overrides any per-stack salt.
 // Returns nil if no config exists and no bases are configured.
 func BuildMergedConfig(s store.Store, app *config.App, stack *config.Stack) ([]byte, error) {
 	stackData, err := s.ReadStackConfig(app.Name, stack.Name)
@@ -148,26 +155,7 @@ func BuildMergedConfig(s store.Store, app *config.App, stack *config.Stack) ([]b
 		return nil, err
 	}
 
-	globalSalt, err := s.ReadEncryptionSalt()
-	if err != nil {
-		return nil, fmt.Errorf("reading global encryption salt: %w", err)
-	}
-
-	if globalSalt == "" {
-		globalSalt, err = GenerateEncryptionSalt()
-		if err != nil {
-			return nil, fmt.Errorf("generating encryption salt: %w", err)
-		}
-		if err := s.WriteEncryptionSalt(globalSalt); err != nil {
-			return nil, fmt.Errorf("saving encryption salt: %w", err)
-		}
-		ui.Info("Generated global encryption salt")
-	}
-
 	if len(stack.Bases) == 0 {
-		if globalSalt != "" {
-			return injectSalt(stackData, globalSalt)
-		}
 		return stackData, nil
 	}
 
@@ -183,15 +171,7 @@ func BuildMergedConfig(s store.Store, app *config.App, stack *config.Stack) ([]b
 		bases = append(bases, baseData)
 	}
 
-	data, err := mergeConfigs(bases, stackData)
-	if err != nil {
-		return nil, err
-	}
-
-	if globalSalt != "" {
-		return injectSalt(data, globalSalt)
-	}
-	return data, nil
+	return mergeConfigs(bases, stackData)
 }
 
 // SaveStackConfig copies the stack config from the workdir back to the store.

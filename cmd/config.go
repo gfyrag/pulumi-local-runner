@@ -241,7 +241,7 @@ func init() {
 func getStackWithConfig(cmd *cobra.Command, s store.Store, app *config.App, stack *config.Stack) (pulumibridge.Stack, func(), error) {
 	git.EnsurePassphrase()
 
-	workDir, cleanup, err := git.PrepareWorkDir(s, app, stack)
+	workDir, cleanup, _, err := git.PrepareWorkDir(s, app, stack, nil)
 	if err != nil {
 		return pulumibridge.Stack{}, nil, fmt.Errorf("preparing workdir: %w", err)
 	}

@@ -15,6 +15,7 @@ import (
 var (
 	verbose      bool
 	configValues []string
+	envFlag      string
 )
 
 var rootCmd = &cobra.Command{
@@ -27,6 +28,28 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Show full Pulumi output")
 	rootCmd.PersistentFlags().StringArrayVarP(&configValues, "config", "c", nil, "Config overrides (key=value, repeatable)")
+	rootCmd.PersistentFlags().StringVarP(&envFlag, "env", "e", "", "Environment to operate on (overrides active env)")
+	rootCmd.RegisterFlagCompletionFunc("env", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		s, err := getStore()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		cfg, err := s.LoadConfig()
+		if err != nil {
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+		seen := make(map[string]bool)
+		var envs []string
+		for _, app := range cfg.Apps {
+			for _, st := range app.Stacks {
+				if st.Env != "" && !seen[st.Env] {
+					seen[st.Env] = true
+					envs = append(envs, st.Env)
+				}
+			}
+		}
+		return envs, cobra.ShellCompDirectiveNoFileComp
+	})
 }
 
 func runOptions() engine.RunOptions {
@@ -133,6 +156,19 @@ func completeAppStacks(cmd *cobra.Command, args []string, toComplete string) ([]
 		}
 	}
 	return completions, cobra.ShellCompDirectiveNoFileComp
+}
+
+// resolveEnv returns the effective environment: --env flag > active env from store.
+func resolveEnv() string {
+	if envFlag != "" {
+		return envFlag
+	}
+	s, err := getStore()
+	if err != nil {
+		return ""
+	}
+	env, _ := s.ReadActiveEnv()
+	return env
 }
 
 // splitAppStack parses an "app/stack" argument into its two components.

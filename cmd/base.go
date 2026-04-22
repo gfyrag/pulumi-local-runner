@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/gfyrag/plr/internal/git"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -170,8 +169,7 @@ func init() {
 	})
 
 	// base set
-	var setSecret bool
-	setCmd := &cobra.Command{
+	baseCmd.AddCommand(&cobra.Command{
 		Use:               "set <name> <key> <value>",
 		Short:             "Set a config value on a base",
 		Args:              cobra.ExactArgs(3),
@@ -204,30 +202,7 @@ func init() {
 				cfg = make(map[string]any)
 			}
 
-			if setSecret {
-				salt, err := s.ReadEncryptionSalt()
-				if err != nil {
-					return err
-				}
-				if salt == "" {
-					salt, err = git.GenerateEncryptionSalt()
-					if err != nil {
-						return err
-					}
-					if err := s.WriteEncryptionSalt(salt); err != nil {
-						return err
-					}
-				}
-
-				encrypted, err := git.EncryptSecret(salt, value)
-				if err != nil {
-					return fmt.Errorf("encrypting secret: %w", err)
-				}
-				cfg[key] = map[string]any{"secure": encrypted}
-			} else {
-				cfg[key] = value
-			}
-
+			cfg[key] = value
 			base["config"] = cfg
 			out, err := yaml.Marshal(base)
 			if err != nil {
@@ -236,9 +211,7 @@ func init() {
 
 			return s.WriteBaseConfig(name, out)
 		},
-	}
-	setCmd.Flags().BoolVar(&setSecret, "secret", false, "Encrypt the value as a secret")
-	baseCmd.AddCommand(setCmd)
+	})
 
 	// base get
 	baseCmd.AddCommand(&cobra.Command{
@@ -269,27 +242,6 @@ func init() {
 			val, ok := cfg[args[1]]
 			if !ok {
 				return fmt.Errorf("key %q not found in base %q", args[1], args[0])
-			}
-
-			// Check if it's a secret
-			if m, ok := val.(map[string]any); ok {
-				if secure, ok := m["secure"].(string); ok {
-					salt, err := s.ReadEncryptionSalt()
-					if err != nil {
-						return err
-					}
-					if salt == "" {
-						fmt.Println("[secret]")
-						return nil
-					}
-					plaintext, err := git.DecryptSecret(salt, secure)
-					if err != nil {
-						fmt.Println("[secret]")
-						return nil
-					}
-					fmt.Println(plaintext)
-					return nil
-				}
 			}
 
 			fmt.Println(val)

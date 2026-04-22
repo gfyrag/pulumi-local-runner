@@ -126,6 +126,18 @@ type ValidationResult struct {
 	Unknown []string
 }
 
+// SecretKeys returns all keys marked as secret in the schema.
+func (s ConfigSchema) SecretKeys() map[string]bool {
+	keys := make(map[string]bool)
+	for _, e := range s.Entries {
+		if e.Secret {
+			keys[e.Key] = true
+			keys[s.ProjectName+":"+e.Key] = true
+		}
+	}
+	return keys
+}
+
 // ValidateConfig checks config against the schema.
 // Returns missing required keys and unknown keys not in the schema.
 func ValidateConfig(schema *ConfigSchema, currentConfig map[string]any) ValidationResult {

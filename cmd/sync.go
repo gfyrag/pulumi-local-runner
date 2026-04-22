@@ -20,7 +20,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			targets, err := engine.ResolveTargets(cfg, args)
+			targets, err := engine.ResolveTargets(cfg, args, resolveEnv())
 			if err != nil {
 				return err
 			}

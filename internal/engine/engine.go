@@ -52,8 +52,9 @@ func (o Operation) String() string {
 }
 
 // ResolveTargets parses arguments like "networking", "networking/dev" into targets.
-// If no args are given, all app/stack pairs are returned.
-func ResolveTargets(cfg *config.Config, args []string) ([]Target, error) {
+// If no args are given, stacks are filtered by env (empty env = all stacks).
+// If args are given, env filter is ignored (explicit targets win).
+func ResolveTargets(cfg *config.Config, args []string, env string) ([]Target, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -62,6 +63,9 @@ func ResolveTargets(cfg *config.Config, args []string) ([]Target, error) {
 		var targets []Target
 		for i := range cfg.Apps {
 			for j := range cfg.Apps[i].Stacks {
+				if env != "" && cfg.Apps[i].Stacks[j].Env != env {
+					continue
+				}
 				targets = append(targets, Target{
 					App:   &cfg.Apps[i],
 					Stack: &cfg.Apps[i].Stacks[j],
@@ -160,8 +164,15 @@ func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts Run
 		}
 	}
 
-	// Create a temp workdir with symlinks + merged config (avoids polluting the real repo)
-	workDir, cleanup, err := git.PrepareWorkDir(s, t.App, t.Stack)
+	// Load schema to identify secret keys
+	var secretKeys map[string]bool
+	schema, _ := pulumibridge.LoadConfigSchema(realWorkDir)
+	if schema != nil {
+		secretKeys = schema.SecretKeys()
+	}
+
+	// Write merged config to workdir (secrets extracted for Automation API)
+	workDir, cleanup, secrets, err := git.PrepareWorkDir(s, t.App, t.Stack, secretKeys)
 	if err != nil {
 		return fmt.Errorf("preparing workdir: %w", err)
 	}
@@ -172,9 +183,16 @@ func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts Run
 		return fmt.Errorf("getting stack: %w", err)
 	}
 
+	// Set secrets via Automation API so Pulumi encrypts them with its own salt
+	for _, sec := range secrets {
+		if err := pulumibridge.SetConfig(ctx, stack, sec.Key, sec.Value, true); err != nil {
+			return fmt.Errorf("setting secret %q: %w", sec.Key, err)
+		}
+	}
+
 	// Validate config against Pulumi.yaml schema
 	if op == OpUp || op == OpPreview {
-		if schema, err := pulumibridge.LoadConfigSchema(workDir); err == nil && schema != nil {
+		if schema != nil {
 			allConfig, configErr := pulumibridge.GetAllConfig(ctx, stack)
 			if configErr == nil {
 				configMap := make(map[string]any)

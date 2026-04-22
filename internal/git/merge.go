@@ -57,18 +57,51 @@ func mergeConfigs(bases [][]byte, stackData []byte) ([]byte, error) {
 	return yaml.Marshal(merged)
 }
 
-// injectSalt overrides the encryptionsalt in a Pulumi config YAML.
-func injectSalt(data []byte, salt string) ([]byte, error) {
-	if data == nil {
-		m := map[string]any{"encryptionsalt": salt}
-		return yaml.Marshal(m)
+// SecretValue represents a plaintext secret extracted from the config.
+type SecretValue struct {
+	Key   string
+	Value string
+}
+
+// ExtractSecretValues removes keys marked as secret from the config YAML
+// and returns them as plaintext key-value pairs. The YAML is re-marshaled without them.
+func ExtractSecretValues(data []byte, secretKeys map[string]bool) ([]byte, []SecretValue, error) {
+	if data == nil || len(secretKeys) == 0 {
+		return data, nil, nil
 	}
+
 	var m map[string]any
 	if err := yaml.Unmarshal(data, &m); err != nil {
-		return nil, fmt.Errorf("parsing config for salt injection: %w", err)
+		return data, nil, err
 	}
-	m["encryptionsalt"] = salt
-	return yaml.Marshal(m)
+
+	cfg, ok := m["config"].(map[string]any)
+	if !ok {
+		return data, nil, nil
+	}
+
+	var secrets []SecretValue
+	for k, v := range cfg {
+		if !secretKeys[k] {
+			continue
+		}
+		// Only extract string values (not already-encrypted {secure:...} objects)
+		switch val := v.(type) {
+		case string:
+			secrets = append(secrets, SecretValue{Key: k, Value: val})
+			delete(cfg, k)
+		}
+	}
+
+	if len(secrets) == 0 {
+		return data, nil, nil
+	}
+
+	out, err := yaml.Marshal(m)
+	if err != nil {
+		return data, nil, err
+	}
+	return out, secrets, nil
 }
 
 // deepMerge merges src into dst. For map values, it recurses. For anything else, src wins.

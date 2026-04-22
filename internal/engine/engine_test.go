@@ -31,7 +31,7 @@ func makeConfig() *config.Config {
 
 func TestResolveTargetsAll(t *testing.T) {
 	cfg := makeConfig()
-	targets, err := ResolveTargets(cfg, nil)
+	targets, err := ResolveTargets(cfg, nil, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -42,7 +42,7 @@ func TestResolveTargetsAll(t *testing.T) {
 
 func TestResolveTargetsByApp(t *testing.T) {
 	cfg := makeConfig()
-	targets, err := ResolveTargets(cfg, []string{"networking"})
+	targets, err := ResolveTargets(cfg, []string{"networking"}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestResolveTargetsByApp(t *testing.T) {
 
 func TestResolveTargetsByAppStack(t *testing.T) {
 	cfg := makeConfig()
-	targets, err := ResolveTargets(cfg, []string{"kubernetes/prod"})
+	targets, err := ResolveTargets(cfg, []string{"kubernetes/prod"}, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestResolveTargetsByAppStack(t *testing.T) {
 
 func TestResolveTargetsUnknownApp(t *testing.T) {
 	cfg := makeConfig()
-	_, err := ResolveTargets(cfg, []string{"unknown"})
+	_, err := ResolveTargets(cfg, []string{"unknown"}, "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -80,7 +80,7 @@ func TestResolveTargetsUnknownApp(t *testing.T) {
 
 func TestResolveTargetsUnknownStack(t *testing.T) {
 	cfg := makeConfig()
-	_, err := ResolveTargets(cfg, []string{"networking/staging"})
+	_, err := ResolveTargets(cfg, []string{"networking/staging"}, "")
 	if err == nil {
 		t.Fatal("expected error")
 	}

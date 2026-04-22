@@ -170,8 +170,13 @@ func (s *S3Store) LoadConfig() (*config.Config, error) {
 				if err := yaml.Unmarshal(data, &sf); err != nil {
 					return nil, fmt.Errorf("parsing stack %s/%s: %w", appName, stackName, err)
 				}
+				env := sf.Env
+				if env == "" {
+					env = "default"
+				}
 				app.Stacks = append(app.Stacks, config.Stack{
 					Name:      stackName,
+					Env:       env,
 					Branch:    sf.Branch,
 					Ref:       sf.Ref,
 					DependsOn: sf.DependsOn,
@@ -212,6 +217,7 @@ func (s *S3Store) SaveConfig(cfg *config.Config) error {
 			}
 
 			sf := config.StackFile{
+				Env:       stack.Env,
 				Branch:    stack.Branch,
 				Ref:       stack.Ref,
 				DependsOn: stack.DependsOn,
@@ -330,10 +336,10 @@ func (s *S3Store) ListBases() ([]string, error) {
 	return names, nil
 }
 
-func (s *S3Store) ReadEncryptionSalt() (string, error) {
-	data, err := s.getObject(context.Background(), s.key("encryptionsalt"))
+func (s *S3Store) ReadActiveEnv() (string, error) {
+	data, err := s.getObject(context.Background(), s.key("active-env"))
 	if err != nil {
-		return "", fmt.Errorf("reading encryption salt from S3: %w", err)
+		return "", fmt.Errorf("reading active env from S3: %w", err)
 	}
 	if data == nil {
 		return "", nil
@@ -341,9 +347,9 @@ func (s *S3Store) ReadEncryptionSalt() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-func (s *S3Store) WriteEncryptionSalt(salt string) error {
-	if err := s.putObject(context.Background(), s.key("encryptionsalt"), []byte(salt+"\n")); err != nil {
-		return fmt.Errorf("writing encryption salt to S3: %w", err)
+func (s *S3Store) WriteActiveEnv(env string) error {
+	if err := s.putObject(context.Background(), s.key("active-env"), []byte(env+"\n")); err != nil {
+		return fmt.Errorf("writing active env to S3: %w", err)
 	}
 	return nil
 }
