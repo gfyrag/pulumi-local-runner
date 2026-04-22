@@ -8,6 +8,10 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gfyrag/plr/internal/config"
+	"github.com/gfyrag/plr/internal/git"
+	pulumibridge "github.com/gfyrag/plr/internal/pulumi"
+	"github.com/gfyrag/plr/internal/ui"
+	"github.com/pulumi/pulumi/sdk/v3/go/auto/optrename"
 	"github.com/spf13/cobra"
 )
 
@@ -346,10 +350,15 @@ func init() {
 				return err
 			}
 
-			// Rename Pulumi stack config file in store (legacy, if separate)
-			if data, readErr := s.ReadStackConfig(app.Name, oldName); readErr == nil && data != nil {
-				if writeErr := s.WriteStackConfig(app.Name, newName, data); writeErr != nil {
-					return fmt.Errorf("renaming stack config: %w", writeErr)
+			// Rename the Pulumi stack via Automation API
+			git.EnsurePassphrase()
+			workDir, err := git.WorkDir(app)
+			if err == nil {
+				oldStack := &config.Stack{Name: oldName, Org: stack.Org, Project: stack.Project}
+				if ps, err := pulumibridge.GetStack(cmd.Context(), oldStack, workDir); err == nil {
+					if _, err := ps.Rename(cmd.Context(), optrename.StackName(newName)); err != nil {
+						ui.Warn("Could not rename Pulumi stack: %s", err)
+					}
 				}
 			}
 
