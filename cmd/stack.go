@@ -336,11 +336,17 @@ func init() {
 
 			stack.Name = newName
 
+			// Rename the stack file before SaveConfig so the config section is preserved
+			if oldPath, err := s.StackFilePath(appName, oldName); err == nil {
+				newPath := strings.TrimSuffix(oldPath, oldName+".yaml") + newName + ".yaml"
+				os.Rename(oldPath, newPath)
+			}
+
 			if err := s.SaveConfig(cfg); err != nil {
 				return err
 			}
 
-			// Rename Pulumi stack config file in store
+			// Rename Pulumi stack config file in store (legacy, if separate)
 			if data, readErr := s.ReadStackConfig(app.Name, oldName); readErr == nil && data != nil {
 				if writeErr := s.WriteStackConfig(app.Name, newName, data); writeErr != nil {
 					return fmt.Errorf("renaming stack config: %w", writeErr)
