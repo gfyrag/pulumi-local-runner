@@ -17,11 +17,10 @@ func IsLocalRepo(repo string) bool {
 	return strings.HasPrefix(repo, "/") || strings.HasPrefix(repo, "./") || strings.HasPrefix(repo, "../") || strings.HasPrefix(repo, "~")
 }
 
-// RepoDir returns the local cache directory for the given app.
-// If the app repo is a local path, it returns that path directly.
-func RepoDir(app *config.App) (string, error) {
-	if IsLocalRepo(app.Repo) {
-		repo := app.Repo
+// RepoDirForStack returns the repo directory, using stack override if set.
+func RepoDirForStack(app *config.App, stack *config.Stack) (string, error) {
+	repo := config.EffectiveRepo(app, stack)
+	if IsLocalRepo(repo) {
 		if strings.HasPrefix(repo, "~") {
 			home, err := os.UserHomeDir()
 			if err != nil {
@@ -38,37 +37,48 @@ func RepoDir(app *config.App) (string, error) {
 	return filepath.Join(cacheDir, app.Name), nil
 }
 
-// WorkDir returns the working directory (repo + path) for the given app.
-func WorkDir(app *config.App) (string, error) {
-	repoDir, err := RepoDir(app)
+// RepoDir returns the local cache directory for the given app (no stack override).
+func RepoDir(app *config.App) (string, error) {
+	return RepoDirForStack(app, nil)
+}
+
+// WorkDirForStack returns the working directory, using stack overrides if set.
+func WorkDirForStack(app *config.App, stack *config.Stack) (string, error) {
+	repoDir, err := RepoDirForStack(app, stack)
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(repoDir, app.Path), nil
+	return filepath.Join(repoDir, config.EffectivePath(app, stack)), nil
+}
+
+// WorkDir returns the working directory (repo + path) for the given app (no stack override).
+func WorkDir(app *config.App) (string, error) {
+	return WorkDirForStack(app, nil)
 }
 
 // Sync clones the repo if it doesn't exist, fetches updates, and checks out the given ref.
 // For local repos, it skips clone/fetch and only checks out the requested ref (if any).
 func Sync(s store.Store, app *config.App, stack *config.Stack) error {
-	repoDir, err := RepoDir(app)
+	repo := config.EffectiveRepo(app, stack)
+	repoDir, err := RepoDirForStack(app, stack)
 	if err != nil {
 		return err
 	}
 
-	if IsLocalRepo(app.Repo) {
+	if IsLocalRepo(repo) {
 		if err := checkout(repoDir, stack); err != nil {
 			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
 		}
 	} else {
 		if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
-			ui.Info("Cloning %s...", app.Repo)
-			if err := runGit("clone", app.Repo, repoDir); err != nil {
-				return fmt.Errorf("cloning %s: %w", app.Repo, err)
+			ui.Info("Cloning %s...", repo)
+			if err := runGit("clone", repo, repoDir); err != nil {
+				return fmt.Errorf("cloning %s: %w", repo, err)
 			}
 		} else {
 			ui.Step("Fetching updates...")
 			if err := runGit("-C", repoDir, "fetch", "--all", "--tags", "--prune"); err != nil {
-				return fmt.Errorf("fetching %s: %w", app.Repo, err)
+				return fmt.Errorf("fetching %s: %w", repo, err)
 			}
 		}
 
@@ -119,7 +129,7 @@ func checkout(repoDir string, stack *config.Stack) error {
 // to be set via the Automation API.
 // Returns the workdir path, a cleanup function, and extracted secrets.
 func PrepareWorkDir(s store.Store, app *config.App, stack *config.Stack, secretKeys map[string]bool) (string, func(), []SecretValue, error) {
-	workDir, err := WorkDir(app)
+	workDir, err := WorkDirForStack(app, stack)
 	if err != nil {
 		return "", nil, nil, err
 	}

@@ -9,6 +9,8 @@ import (
 type Stack struct {
 	Name      string   `yaml:"name"`
 	Env       string   `yaml:"env,omitempty"`
+	Repo      string   `yaml:"repo,omitempty"`
+	Path      string   `yaml:"path,omitempty"`
 	Branch    string   `yaml:"branch,omitempty"`
 	Ref       string   `yaml:"ref,omitempty"`
 	DependsOn []string `yaml:"dependsOn,omitempty"`
@@ -40,6 +42,8 @@ type AppFile struct {
 // It combines the stack definition and Pulumi config in a single file.
 type StackFile struct {
 	Env       string         `yaml:"env,omitempty"`
+	Repo      string         `yaml:"repo,omitempty"`
+	Path      string         `yaml:"path,omitempty"`
 	Branch    string         `yaml:"branch,omitempty"`
 	Ref       string         `yaml:"ref,omitempty"`
 	DependsOn []string       `yaml:"dependsOn,omitempty"`
@@ -47,6 +51,22 @@ type StackFile struct {
 	Project   string         `yaml:"project,omitempty"`
 	Bases     []string       `yaml:"bases,omitempty"`
 	Config    map[string]any `yaml:"config,omitempty"`
+}
+
+// EffectiveRepo returns the stack's repo override if set, otherwise the app's repo.
+func EffectiveRepo(app *App, stack *Stack) string {
+	if stack != nil && stack.Repo != "" {
+		return stack.Repo
+	}
+	return app.Repo
+}
+
+// EffectivePath returns the stack's path override if set, otherwise the app's path.
+func EffectivePath(app *App, stack *Stack) string {
+	if stack != nil && stack.Path != "" {
+		return stack.Path
+	}
+	return app.Path
 }
 
 func ConfigDir() (string, error) {

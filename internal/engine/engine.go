@@ -152,7 +152,7 @@ func runOne(ctx context.Context, s store.Store, t Target, op Operation, opts Run
 		return nil
 	}
 
-	realWorkDir, err := git.WorkDir(t.App)
+	realWorkDir, err := git.WorkDirForStack(t.App, t.Stack)
 	if err != nil {
 		return err
 	}

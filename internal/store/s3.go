@@ -177,6 +177,8 @@ func (s *S3Store) LoadConfig() (*config.Config, error) {
 				app.Stacks = append(app.Stacks, config.Stack{
 					Name:      stackName,
 					Env:       env,
+					Repo:      sf.Repo,
+					Path:      sf.Path,
 					Branch:    sf.Branch,
 					Ref:       sf.Ref,
 					DependsOn: sf.DependsOn,
@@ -218,6 +220,8 @@ func (s *S3Store) SaveConfig(cfg *config.Config) error {
 
 			sf := config.StackFile{
 				Env:       stack.Env,
+				Repo:      stack.Repo,
+				Path:      stack.Path,
 				Branch:    stack.Branch,
 				Ref:       stack.Ref,
 				DependsOn: stack.DependsOn,
