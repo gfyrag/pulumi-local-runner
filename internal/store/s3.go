@@ -257,11 +257,17 @@ func (s *S3Store) ReadStackConfig(appName, stackName string) ([]byte, error) {
 		return nil, fmt.Errorf("parsing stack file: %w", err)
 	}
 
-	if sf.Config == nil {
+	if sf.Config == nil && sf.EncryptionSalt == "" {
 		return nil, nil
 	}
 
-	pulumiCfg := map[string]any{"config": sf.Config}
+	pulumiCfg := make(map[string]any)
+	if sf.Config != nil {
+		pulumiCfg["config"] = sf.Config
+	}
+	if sf.EncryptionSalt != "" {
+		pulumiCfg["encryptionsalt"] = sf.EncryptionSalt
+	}
 	return yaml.Marshal(pulumiCfg)
 }
 
@@ -285,6 +291,9 @@ func (s *S3Store) WriteStackConfig(appName, stackName string, data []byte) error
 		}
 	} else {
 		sf.Config = nil
+	}
+	if salt, ok := incoming["encryptionsalt"].(string); ok {
+		sf.EncryptionSalt = salt
 	}
 
 	out, err := yaml.Marshal(sf)

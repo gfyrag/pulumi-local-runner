@@ -41,16 +41,17 @@ type AppFile struct {
 // The stack name is derived from the file name.
 // It combines the stack definition and Pulumi config in a single file.
 type StackFile struct {
-	Env       string         `yaml:"env,omitempty"`
-	Repo      string         `yaml:"repo,omitempty"`
-	Path      string         `yaml:"path,omitempty"`
-	Branch    string         `yaml:"branch,omitempty"`
+	Env            string         `yaml:"env,omitempty"`
+	Repo           string         `yaml:"repo,omitempty"`
+	Path           string         `yaml:"path,omitempty"`
+	Branch         string         `yaml:"branch,omitempty"`
 	Ref       string         `yaml:"ref,omitempty"`
 	DependsOn []string       `yaml:"dependsOn,omitempty"`
 	Org       string         `yaml:"org,omitempty"`
 	Project   string         `yaml:"project,omitempty"`
 	Bases     []string       `yaml:"bases,omitempty"`
-	Config    map[string]any `yaml:"config,omitempty"`
+	Config         map[string]any `yaml:"config,omitempty"`
+	EncryptionSalt string         `yaml:"encryptionsalt,omitempty"`
 }
 
 // EffectiveRepo returns the stack's repo override if set, otherwise the app's repo.
