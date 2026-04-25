@@ -1,0 +1,43 @@
+name: loki
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: Loki log aggregation
+x-plr-config:
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: Kubernetes namespace (defaults to stack name)
+  loki:
+    type: object
+    description: Loki Helm chart values
+    properties:
+      deploymentMode: {type: string}
+      loki:
+        type: object
+        description: Loki server configuration
+      persistence:
+        type: object
+        properties:
+          enabled: {type: boolean}
+          size: {type: string}
+      singleBinary:
+        type: object
+        properties:
+          replicas: {type: integer}
+      read:
+        type: object
+        properties:
+          replicas: {type: integer}
+      write:
+        type: object
+        properties:
+          replicas: {type: integer}
+      backend:
+        type: object
+        properties:
+          replicas: {type: integer}

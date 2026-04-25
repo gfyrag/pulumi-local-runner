@@ -1,0 +1,40 @@
+name: victoriametrics
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: VictoriaMetrics time-series database
+x-plr-config:
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: Kubernetes namespace (defaults to stack name)
+  victoriametrics:
+    type: object
+    description: VictoriaMetrics Helm chart values
+    properties:
+      server:
+        type: object
+        description: Server configuration
+        properties:
+          persistentVolume:
+            type: object
+            properties:
+              enabled: {type: boolean}
+              size: {type: string}
+          resources:
+            type: object
+            properties:
+              limits: {type: object}
+              requests: {type: object}
+      promscrape:
+        type: object
+        properties:
+          enabled: {type: boolean}
+      service:
+        type: object
+        properties:
+          type: {type: string}

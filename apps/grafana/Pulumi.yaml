@@ -1,0 +1,41 @@
+name: grafana
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: Grafana Operator, instance, datasources, and dashboards
+x-plr-config:
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: Kubernetes namespace (defaults to stack name)
+  grafana:
+    type: object
+    description: Grafana CRD spec (grafana.integreatly.org/v1beta1 Grafana)
+    properties:
+      config:
+        type: object
+        description: Grafana configuration (maps to grafana.ini sections)
+      deployment:
+        type: object
+        description: Deployment customization (strategy, containers, resources)
+      ingress:
+        type: object
+        description: Ingress resource (metadata + spec)
+      persistentVolumeClaim:
+        type: object
+        description: PVC for Grafana data
+      service:
+        type: object
+        description: Service resource (metadata + spec)
+  grafana-dnsEndpoint:
+    type: object
+    description: ExternalDNS DNSEndpoint for Grafana ingress
+    properties:
+      annotations: {type: object}
+      endpoints:
+        type: array
+        description: DNS endpoint entries

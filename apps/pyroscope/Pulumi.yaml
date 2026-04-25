@@ -1,0 +1,43 @@
+name: pyroscope
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: Pyroscope continuous profiling
+x-plr-config:
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: Kubernetes namespace (defaults to stack name)
+  pyroscope:
+    type: object
+    description: Pyroscope Helm chart values
+    properties:
+      deploymentMode: {type: string}
+      pyroscope:
+        type: object
+        description: Pyroscope server configuration
+        properties:
+          enabled: {type: boolean}
+          extraArgs: {type: object}
+          persistence:
+            type: object
+            properties:
+              enabled: {type: boolean}
+              size: {type: string}
+          resources:
+            type: object
+            properties:
+              limits: {type: object}
+              requests: {type: object}
+      agent:
+        type: object
+        properties:
+          enabled: {type: boolean}
+      minio:
+        type: object
+        properties:
+          enabled: {type: boolean}
