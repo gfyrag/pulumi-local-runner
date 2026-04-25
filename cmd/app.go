@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/gfyrag/plr/internal/config"
@@ -104,6 +105,65 @@ func init() {
 				return err
 			}
 			fmt.Printf("Removed app %q\n", name)
+			return nil
+		},
+	})
+
+	// app rename
+	appCmd.AddCommand(&cobra.Command{
+		Use:               "rename <old-name> <new-name>",
+		Aliases:           []string{"mv"},
+		Short:             "Rename an app",
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: completeApps,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			oldName, newName := args[0], args[1]
+
+			s, err := getStore()
+			if err != nil {
+				return err
+			}
+
+			cfg, err := s.LoadConfig()
+			if err != nil {
+				return err
+			}
+
+			if _, err := cfg.FindApp(newName); err == nil {
+				return fmt.Errorf("app %q already exists", newName)
+			}
+
+			app, err := cfg.FindApp(oldName)
+			if err != nil {
+				return err
+			}
+
+			// Update dependsOn references across all stacks
+			for i := range cfg.Apps {
+				for j := range cfg.Apps[i].Stacks {
+					for k, dep := range cfg.Apps[i].Stacks[j].DependsOn {
+						parts := strings.SplitN(dep, "/", 2)
+						if len(parts) == 2 && parts[0] == oldName {
+							cfg.Apps[i].Stacks[j].DependsOn[k] = newName + "/" + parts[1]
+						}
+					}
+				}
+			}
+
+			// Rename the app directory before SaveConfig so configs are preserved
+			if oldPath, err := s.StackFilePath(oldName, "app"); err == nil {
+				oldDir := filepath.Dir(oldPath)
+				newDir := filepath.Join(filepath.Dir(oldDir), newName)
+				os.Rename(oldDir, newDir)
+			}
+
+			app.Name = newName
+
+			if err := s.SaveConfig(cfg); err != nil {
+				return err
+			}
+
+			fmt.Printf("Renamed app %q → %q\n", oldName, newName)
 			return nil
 		},
 	})
