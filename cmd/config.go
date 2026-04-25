@@ -11,6 +11,7 @@ import (
 	pulumibridge "github.com/gfyrag/plr/internal/pulumi"
 	"github.com/gfyrag/plr/internal/store"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var configCmd = &cobra.Command{
@@ -79,13 +80,42 @@ func init() {
 				return err
 			}
 
+			if setSecret {
+				// Store secret values in plaintext in the plr config file.
+				// They will be passed to Pulumi via SetConfig(secret=true) at runtime.
+				data, err := s.ReadStackConfig(app.Name, stack.Name)
+				if err != nil {
+					return err
+				}
+				var m map[string]any
+				if data != nil {
+					if err := yaml.Unmarshal(data, &m); err != nil {
+						return fmt.Errorf("parsing stack config: %w", err)
+					}
+				}
+				if m == nil {
+					m = make(map[string]any)
+				}
+				cfg, _ := m["config"].(map[string]any)
+				if cfg == nil {
+					cfg = make(map[string]any)
+				}
+				cfg[args[1]] = args[2]
+				m["config"] = cfg
+				out, err := yaml.Marshal(m)
+				if err != nil {
+					return err
+				}
+				return s.WriteStackConfig(app.Name, stack.Name, out)
+			}
+
 			ps, cleanup, err := getStackWithConfig(cmd, s, app, stack)
 			if err != nil {
 				return err
 			}
 			defer cleanup()
 
-			if err := pulumibridge.SetConfig(cmd.Context(), ps, args[1], args[2], setSecret); err != nil {
+			if err := pulumibridge.SetConfig(cmd.Context(), ps, args[1], args[2], false); err != nil {
 				return err
 			}
 
