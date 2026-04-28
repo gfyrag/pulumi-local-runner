@@ -1,6 +1,7 @@
 # Binaries
 plr
 *.exe
+**/bin/pulumi
 
 # IDE
 .idea/
