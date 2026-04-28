@@ -44,6 +44,7 @@ func main() {
 		if err != nil {
 			return fmt.Errorf("failed to read Grafana values: %w", err)
 		}
+
 		grafana, err := apiextensions.NewCustomResource(ctx, "grafana", &apiextensions.CustomResourceArgs{
 			ApiVersion: pulumi.String("grafana.integreatly.org/v1beta1"),
 			Kind:       pulumi.String("Grafana"),

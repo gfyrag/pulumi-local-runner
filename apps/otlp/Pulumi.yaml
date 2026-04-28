@@ -1,5 +1,4 @@
-  Ok, déplace toute les apps de monitoring dans ~/Work/Perso/Projects/pulumi-local-runner/apps.
-  Met a jour la config plr.name: otlp
+name: otlp
 runtime:
   name: go
   options:

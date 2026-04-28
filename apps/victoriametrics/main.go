@@ -44,9 +44,7 @@ func main() {
 			URL:       "http://vm-victoria-metrics-single-server:8428",
 			IsDefault: true,
 			JsonData: map[string]any{
-				"httpMethod":        "POST",
-				"prometheusType":    "Prometheus",
-				"prometheusVersion": "2.37.0",
+				"httpMethod": "POST",
 			},
 		}, pulumi.DependsOn([]pulumi.Resource{release}))
 		if err != nil {
