@@ -27,11 +27,10 @@ func main() {
 			Name:           pulumi.String("vm"),
 			Chart:          pulumi.String("victoria-metrics-single"),
 			RepositoryOpts: &helm.RepositoryOptsArgs{Repo: pulumi.String("https://victoriametrics.github.io/helm-charts/")},
-			Namespace:      k8s.Namespace.Metadata.Name(),
+			Namespace:      k8s.NamespaceName,
 			Values:         pulumi.ToMap(values),
 			ForceUpdate:    pulumi.Bool(true),
 		},
-			pulumi.DependsOn([]pulumi.Resource{k8s.Namespace}),
 			pulumi.Provider(k8s.Provider),
 		)
 		if err != nil {

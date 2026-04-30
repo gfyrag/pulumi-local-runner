@@ -41,17 +41,14 @@ func NewGrafanaDatasource(
 
 	k8sName := fmt.Sprintf("datasource-%s", strings.ToLower(spec.Name))
 
-	baseOpts := []pulumi.ResourceOption{
-		pulumi.DependsOn([]pulumi.Resource{k8s.Namespace}),
-		pulumi.Provider(k8s.Provider),
-	}
+	baseOpts := []pulumi.ResourceOption{pulumi.Provider(k8s.Provider)}
 
 	return apiextensions.NewCustomResource(ctx, k8sName, &apiextensions.CustomResourceArgs{
 		ApiVersion: pulumi.String("grafana.integreatly.org/v1beta1"),
 		Kind:       pulumi.String("GrafanaDatasource"),
 		Metadata: &metav1.ObjectMetaArgs{
 			Name:      pulumi.String(k8sName),
-			Namespace: k8s.Namespace.Metadata.Name(),
+			Namespace: k8s.NamespaceName,
 		},
 		OtherFields: map[string]any{
 			"spec": map[string]any{

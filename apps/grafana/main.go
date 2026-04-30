@@ -21,19 +21,16 @@ func main() {
 		if err != nil {
 			return err
 		}
-		namespace := k8s.Namespace
-		k8sProvider := k8s.Provider
 
 		// Grafana Operator
 		grafanaOperator, err := helm.NewRelease(ctx, "grafana-operator", &helm.ReleaseArgs{
 			Name:           pulumi.String("grafana-operator"),
 			Chart:          pulumi.String("grafana-operator"),
 			RepositoryOpts: &helm.RepositoryOptsArgs{Repo: pulumi.String("https://grafana.github.io/helm-charts")},
-			Namespace:      namespace.Metadata.Name(),
+			Namespace:      k8s.NamespaceName,
 			ForceUpdate:    pulumi.Bool(true),
 		},
-			pulumi.DependsOn([]pulumi.Resource{namespace}),
-			pulumi.Provider(k8sProvider),
+			pulumi.Provider(k8s.Provider),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to deploy Grafana Operator: %w", err)
@@ -50,7 +47,7 @@ func main() {
 			Kind:       pulumi.String("Grafana"),
 			Metadata: &metav1.ObjectMetaArgs{
 				Name:      pulumi.String("grafana"),
-				Namespace: namespace.Metadata.Name(),
+				Namespace: k8s.NamespaceName,
 				Labels: pulumi.StringMap{
 					"dashboards": pulumi.String(grafanaInstanceSelector),
 				},
@@ -60,7 +57,7 @@ func main() {
 			},
 		},
 			pulumi.DependsOn([]pulumi.Resource{grafanaOperator}),
-			pulumi.Provider(k8sProvider),
+			pulumi.Provider(k8s.Provider),
 		)
 		if err != nil {
 			return fmt.Errorf("failed to create Grafana instance: %w", err)
@@ -84,7 +81,7 @@ func main() {
 				Kind:       pulumi.String("DNSEndpoint"),
 				Metadata: &metav1.ObjectMetaArgs{
 					Name:        pulumi.String("grafana"),
-					Namespace:   namespace.Metadata.Name(),
+					Namespace:   k8s.NamespaceName,
 					Annotations: pulumi.ToStringMap(dnsAnnotations),
 				},
 				OtherFields: map[string]any{
@@ -94,7 +91,7 @@ func main() {
 				},
 			},
 				pulumi.DependsOn([]pulumi.Resource{grafana}),
-				pulumi.Provider(k8sProvider),
+				pulumi.Provider(k8s.Provider),
 			)
 			if err != nil {
 				return fmt.Errorf("failed to create Grafana DNSEndpoint: %w", err)

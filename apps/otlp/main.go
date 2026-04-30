@@ -27,11 +27,10 @@ func main() {
 			Name:           pulumi.String("otel"),
 			Chart:          pulumi.String("opentelemetry-collector"),
 			RepositoryOpts: &helm.RepositoryOptsArgs{Repo: pulumi.String("https://open-telemetry.github.io/opentelemetry-helm-charts")},
-			Namespace:      k8s.Namespace.Metadata.Name(),
+			Namespace:      k8s.NamespaceName,
 			Values:         pulumi.ToMap(values),
 			ForceUpdate:    pulumi.Bool(true),
 		},
-			pulumi.DependsOn([]pulumi.Resource{k8s.Namespace}),
 			pulumi.Provider(k8s.Provider),
 		)
 		if err != nil {
