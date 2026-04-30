@@ -2,6 +2,12 @@
 plr
 *.exe
 **/bin/pulumi
+apps/grafana/grafana
+apps/loki/loki
+apps/otlp/otlp
+apps/pyroscope/pyroscope
+apps/tempo/tempo
+apps/victoriametrics/victoriametrics
 
 # IDE
 .idea/
