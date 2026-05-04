@@ -27,8 +27,9 @@ func main() {
 			Name:           pulumi.String("grafana-operator"),
 			Chart:          pulumi.String("grafana-operator"),
 			RepositoryOpts: &helm.RepositoryOptsArgs{Repo: pulumi.String("https://grafana.github.io/helm-charts")},
-			Namespace:      k8s.NamespaceName,
-			ForceUpdate:    pulumi.Bool(true),
+			Namespace:       k8s.NamespaceName,
+			CreateNamespace: pulumi.Bool(false),
+			ForceUpdate:     pulumi.Bool(true),
 		},
 			pulumi.Provider(k8s.Provider),
 		)

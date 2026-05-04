@@ -27,9 +27,10 @@ func main() {
 			Name:           pulumi.String("tempo"),
 			Chart:          pulumi.String("tempo"),
 			RepositoryOpts: &helm.RepositoryOptsArgs{Repo: pulumi.String("https://grafana.github.io/helm-charts")},
-			Namespace:      k8s.NamespaceName,
-			Values:         pulumi.ToMap(values),
-			ForceUpdate:    pulumi.Bool(true),
+			Namespace:       k8s.NamespaceName,
+			CreateNamespace: pulumi.Bool(false),
+			Values:          pulumi.ToMap(values),
+			ForceUpdate:     pulumi.Bool(true),
 		},
 			pulumi.Provider(k8s.Provider),
 		)

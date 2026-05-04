@@ -8,6 +8,7 @@ apps/otlp/otlp
 apps/pyroscope/pyroscope
 apps/tempo/tempo
 apps/victoriametrics/victoriametrics
+apps/k6-operator/k6-operator
 
 # IDE
 .idea/

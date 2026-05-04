@@ -324,25 +324,70 @@ func coerceValue(value, typ string) any {
 	}
 }
 
+// parseArrayIndex splits a path segment like "resources[0]" into ("resources", 0, true).
+// For plain segments like "name" it returns ("name", 0, false).
+func parseArrayIndex(part string) (string, int, bool) {
+	open := strings.Index(part, "[")
+	if open < 0 {
+		return part, 0, false
+	}
+	close := strings.Index(part, "]")
+	if close < 0 || close <= open+1 {
+		return part, 0, false
+	}
+	idx, err := strconv.Atoi(part[open+1 : close])
+	if err != nil {
+		return part, 0, false
+	}
+	return part[:open], idx, true
+}
+
+// ensureSlice returns the []any at m[name], growing it to at least size idx+1.
+func ensureSlice(m map[string]any, name string, idx int) []any {
+	arr, _ := m[name].([]any)
+	for len(arr) <= idx {
+		arr = append(arr, nil)
+	}
+	m[name] = arr
+	return arr
+}
+
 // setNestedValue sets a value at a dot-separated path in a map.
+// Array indices are supported: "resources[0].spec.image" navigates into slices.
 func setNestedValue(m map[string]any, key string, value any) {
 	parts := strings.Split(key, ".")
-	if len(parts) == 1 {
-		m[key] = value
-		return
-	}
 
-	// Navigate/create nested maps
+	// Navigate/create intermediate containers
 	current := m
 	for _, part := range parts[:len(parts)-1] {
-		next, ok := current[part].(map[string]any)
-		if !ok {
-			next = make(map[string]any)
-			current[part] = next
+		name, idx, hasIdx := parseArrayIndex(part)
+		if hasIdx {
+			arr := ensureSlice(current, name, idx)
+			elem, ok := arr[idx].(map[string]any)
+			if !ok {
+				elem = make(map[string]any)
+				arr[idx] = elem
+			}
+			current = elem
+		} else {
+			next, ok := current[name].(map[string]any)
+			if !ok {
+				next = make(map[string]any)
+				current[name] = next
+			}
+			current = next
 		}
-		current = next
 	}
-	current[parts[len(parts)-1]] = value
+
+	// Set the final value
+	last := parts[len(parts)-1]
+	name, idx, hasIdx := parseArrayIndex(last)
+	if hasIdx {
+		arr := ensureSlice(current, name, idx)
+		arr[idx] = value
+	} else {
+		current[last] = value
+	}
 }
 
 // topoSort orders targets respecting dependsOn. Simple Kahn's algorithm.

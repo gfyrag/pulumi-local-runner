@@ -18,14 +18,25 @@ func main() {
 			return err
 		}
 
-		values, err := shared.GetConfigObject(cfg, "loki", ".")
+		values, err := shared.GetConfigObject(cfg, "k6-operator", ".")
 		if err != nil {
-			return fmt.Errorf("failed to read Loki values: %w", err)
+			return fmt.Errorf("failed to read k6 Operator values: %w", err)
 		}
 
-		release, err := helm.NewRelease(ctx, "loki", &helm.ReleaseArgs{
-			Name:           pulumi.String("loki"),
-			Chart:          pulumi.String("loki"),
+		// Disable namespace creation — the namespace is managed externally
+		if values == nil {
+			values = make(map[string]any)
+		}
+		ns, _ := values["namespace"].(map[string]any)
+		if ns == nil {
+			ns = make(map[string]any)
+		}
+		ns["create"] = false
+		values["namespace"] = ns
+
+		release, err := helm.NewRelease(ctx, "k6-operator", &helm.ReleaseArgs{
+			Name:           pulumi.String("k6-operator"),
+			Chart:          pulumi.String("k6-operator"),
 			RepositoryOpts: &helm.RepositoryOptsArgs{Repo: pulumi.String("https://grafana.github.io/helm-charts")},
 			Namespace:       k8s.NamespaceName,
 			CreateNamespace: pulumi.Bool(false),
@@ -35,16 +46,7 @@ func main() {
 			pulumi.Provider(k8s.Provider),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to deploy Loki: %w", err)
-		}
-
-		_, err = shared.NewGrafanaDatasource(ctx, k8s, shared.GrafanaDatasourceSpec{
-			Name: "Loki",
-			Type: "loki",
-			URL:  "http://loki:3100",
-		}, pulumi.DependsOn([]pulumi.Resource{release}))
-		if err != nil {
-			return fmt.Errorf("failed to create Loki datasource: %w", err)
+			return fmt.Errorf("failed to deploy k6 Operator: %w", err)
 		}
 
 		ctx.Export("release", release.Name)

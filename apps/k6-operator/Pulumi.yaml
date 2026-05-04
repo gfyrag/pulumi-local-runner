@@ -1,0 +1,32 @@
+name: k6-operator
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: Grafana k6 Operator for Kubernetes
+x-plr-config:
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: Kubernetes namespace (defaults to stack name)
+  k6-operator:
+    type: object
+    description: k6 Operator Helm chart values
+    properties:
+      manager:
+        type: object
+        description: Manager configuration
+        properties:
+          resources:
+            type: object
+            properties:
+              limits: {type: object}
+              requests: {type: object}
+      authProxy:
+        type: object
+        description: Auth proxy configuration
+        properties:
+          enabled: {type: boolean}

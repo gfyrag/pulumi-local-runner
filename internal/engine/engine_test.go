@@ -185,3 +185,73 @@ func TestTargetKey(t *testing.T) {
 		t.Errorf("got %q", tgt.Key())
 	}
 }
+
+func TestSetNestedValueSimple(t *testing.T) {
+	m := map[string]any{}
+	setNestedValue(m, "a.b.c", "val")
+	c := m["a"].(map[string]any)["b"].(map[string]any)["c"]
+	if c != "val" {
+		t.Errorf("got %v", c)
+	}
+}
+
+func TestSetNestedValueArrayIndex(t *testing.T) {
+	m := map[string]any{}
+	setNestedValue(m, "resources[0].manifest.spec.image.tag", "latest")
+
+	arr := m["resources"].([]any)
+	if len(arr) != 1 {
+		t.Fatalf("expected 1 element, got %d", len(arr))
+	}
+	tag := arr[0].(map[string]any)["manifest"].(map[string]any)["spec"].(map[string]any)["image"].(map[string]any)["tag"]
+	if tag != "latest" {
+		t.Errorf("got %v", tag)
+	}
+}
+
+func TestSetNestedValueArrayIndexPreservesExisting(t *testing.T) {
+	m := map[string]any{
+		"resources": []any{
+			map[string]any{"name": "existing"},
+		},
+	}
+	setNestedValue(m, "resources[0].image", "new")
+
+	elem := m["resources"].([]any)[0].(map[string]any)
+	if elem["name"] != "existing" {
+		t.Errorf("existing value lost: %v", elem)
+	}
+	if elem["image"] != "new" {
+		t.Errorf("new value not set: %v", elem)
+	}
+}
+
+func TestSetNestedValueArrayGrows(t *testing.T) {
+	m := map[string]any{}
+	setNestedValue(m, "items[2].name", "third")
+
+	arr := m["items"].([]any)
+	if len(arr) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(arr))
+	}
+	if arr[0] != nil || arr[1] != nil {
+		t.Errorf("expected nil padding, got %v, %v", arr[0], arr[1])
+	}
+	name := arr[2].(map[string]any)["name"]
+	if name != "third" {
+		t.Errorf("got %v", name)
+	}
+}
+
+func TestSetNestedValueArrayAsLeaf(t *testing.T) {
+	m := map[string]any{}
+	setNestedValue(m, "tags[1]", "v2")
+
+	arr := m["tags"].([]any)
+	if len(arr) != 2 {
+		t.Fatalf("expected 2 elements, got %d", len(arr))
+	}
+	if arr[1] != "v2" {
+		t.Errorf("got %v", arr[1])
+	}
+}
