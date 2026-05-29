@@ -45,7 +45,8 @@ func (s ConfigSchema) Required() []ConfigSchemaEntry {
 // pulumiYAML is the structure of Pulumi.yaml for parsing.
 type pulumiYAML struct {
 	Name      string         `yaml:"name"`
-	PLRConfig map[string]any `yaml:"x-plr-config"`
+	Schema    map[string]any `yaml:"schema"`
+	PLRConfig map[string]any `yaml:"x-plr-config"` // deprecated: kept for backward compatibility
 }
 
 // LoadConfigSchema parses the config section from a Pulumi.yaml in the given workdir.
@@ -61,13 +62,17 @@ func LoadConfigSchema(workDir string) (*ConfigSchema, error) {
 		return nil, fmt.Errorf("parsing Pulumi.yaml: %w", err)
 	}
 
-	if len(proj.PLRConfig) == 0 {
+	cfgMap := proj.Schema
+	if len(cfgMap) == 0 {
+		cfgMap = proj.PLRConfig // fallback to deprecated key
+	}
+	if len(cfgMap) == 0 {
 		return nil, nil
 	}
 
 	schema := &ConfigSchema{ProjectName: proj.Name}
 
-	schema.Entries = parseEntries(proj.PLRConfig)
+	schema.Entries = parseEntries(cfgMap)
 	return schema, nil
 }
 

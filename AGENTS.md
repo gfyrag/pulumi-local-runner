@@ -14,7 +14,7 @@ the source of truth.
 
 Secrets are stored **in plaintext** in the plr config files (stack files
 and bases). They are identified by the `secret: true` flag in the
-`x-plr-config` schema of each project's `Pulumi.yaml`.
+`schema` section of each project's `Pulumi.yaml` (formerly `x-plr-config`).
 
 At runtime, plr extracts secret values from the merged config YAML and
 passes them to Pulumi via `SetConfig(secret=true)` through the

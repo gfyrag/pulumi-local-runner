@@ -4,7 +4,7 @@ runtime:
   options:
     buildTarget: ./bin/pulumi
 description: Grafana k6 Operator for Kubernetes
-x-plr-config:
+schema:
   k8s-context:
     type: string
     required: true

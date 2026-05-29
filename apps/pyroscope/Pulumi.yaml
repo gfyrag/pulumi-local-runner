@@ -4,7 +4,7 @@ runtime:
   options:
     buildTarget: ./bin/pulumi
 description: Pyroscope continuous profiling
-x-plr-config:
+schema:
   k8s-context:
     type: string
     required: true

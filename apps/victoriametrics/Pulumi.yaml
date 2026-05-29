@@ -4,7 +4,7 @@ runtime:
   options:
     buildTarget: ./bin/pulumi
 description: VictoriaMetrics time-series database
-x-plr-config:
+schema:
   k8s-context:
     type: string
     required: true
