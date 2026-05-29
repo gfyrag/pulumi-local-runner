@@ -12,27 +12,23 @@ schema:
   namespace:
     type: string
     description: Kubernetes namespace (defaults to stack name)
-  nats:
+  config:
     type: object
-    description: NATS Helm chart values
+    description: NATS server configuration (Helm chart values under config)
     properties:
-      config:
+      cluster:
         type: object
-        description: NATS server configuration
-        properties:
-          cluster:
-            type: object
-            description: Cluster configuration
-          jetstream:
-            type: object
-            description: JetStream configuration
-      container:
+        description: Cluster configuration
+      jetstream:
         type: object
-        description: Container configuration
-        properties:
-          image:
-            type: object
-            description: Image configuration
-          resources:
-            type: object
-            description: Resource limits/requests
+        description: JetStream configuration
+  container:
+    type: object
+    description: Container configuration (Helm chart values under container)
+    properties:
+      image:
+        type: object
+        description: Image configuration
+      resources:
+        type: object
+        description: Resource limits/requests

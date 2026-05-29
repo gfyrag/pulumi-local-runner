@@ -18,13 +18,12 @@ func main() {
 			return err
 		}
 
-		values, err := shared.GetConfigObject(cfg, "nats", ".")
-		if err != nil {
-			return fmt.Errorf("failed to read NATS values: %w", err)
-		}
-
-		if values == nil {
-			values = make(map[string]any)
+		values := make(map[string]any)
+		for _, key := range []string{"config", "container"} {
+			var v any
+			if err := cfg.GetObject(key, &v); err == nil {
+				values[key] = v
+			}
 		}
 
 		release, err := helm.NewRelease(ctx, "nats", &helm.ReleaseArgs{
