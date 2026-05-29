@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/fatih/color"
@@ -125,6 +126,10 @@ func init() {
 				apps = cfg.Apps
 			}
 
+			slices.SortFunc(apps, func(a, b config.App) int {
+				return strings.Compare(a.Name, b.Name)
+			})
+
 			filterEnv := resolveEnv()
 			first := true
 			for _, app := range apps {
@@ -138,17 +143,15 @@ func init() {
 				if len(stacks) == 0 {
 					continue
 				}
+				slices.SortFunc(stacks, func(a, b config.Stack) int {
+					return strings.Compare(a.Name, b.Name)
+				})
 
 				if !first {
 					fmt.Println()
 				}
 				first = false
-				stackName.Println(app.Name)
-				stackMeta.Printf("  repo: %s\n", app.Repo)
-				if app.Path != "." {
-					stackMeta.Printf("  path: %s\n", app.Path)
-				}
-				fmt.Println()
+				stackName.Printf("● %s\n", app.Name)
 				for _, st := range stacks {
 					ref := st.Branch
 					if st.Ref != "" {
@@ -158,9 +161,8 @@ func init() {
 						ref = "(default)"
 					}
 					fmt.Print("  ")
-					stackName.Print(st.Name)
-					fmt.Print("  ")
-					stackRef.Print(ref)
+					stackRef.Printf("%-20s", st.Name)
+					stackMeta.Print(ref)
 					if st.Env != "" && st.Env != "default" {
 						stackMeta.Printf("  env:%s", st.Env)
 					}
