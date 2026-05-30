@@ -9,6 +9,11 @@ apps/pyroscope/pyroscope
 apps/tempo/tempo
 apps/victoriametrics/victoriametrics
 apps/k6-operator/k6-operator
+apps/nats/nats
+apps/formance/controlplane/membership/membership
+apps/formance/dataplane/infra/agent/agent
+apps/formance/dataplane/ledger-operator/operator/operator
+apps/formance/dataplane/ledger-operator/ledger/ledger
 
 # IDE
 .idea/

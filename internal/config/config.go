@@ -45,11 +45,11 @@ type StackFile struct {
 	Repo           string         `yaml:"repo,omitempty"`
 	Path           string         `yaml:"path,omitempty"`
 	Branch         string         `yaml:"branch,omitempty"`
-	Ref       string         `yaml:"ref,omitempty"`
-	DependsOn []string       `yaml:"dependsOn,omitempty"`
-	Org       string         `yaml:"org,omitempty"`
-	Project   string         `yaml:"project,omitempty"`
-	Bases     []string       `yaml:"bases,omitempty"`
+	Ref            string         `yaml:"ref,omitempty"`
+	DependsOn      []string       `yaml:"dependsOn,omitempty"`
+	Org            string         `yaml:"org,omitempty"`
+	Project        string         `yaml:"project,omitempty"`
+	Bases          []string       `yaml:"bases,omitempty"`
 	Config         map[string]any `yaml:"config,omitempty"`
 	EncryptionSalt string         `yaml:"encryptionsalt,omitempty"`
 }

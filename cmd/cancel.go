@@ -13,7 +13,7 @@ func init() {
 		Use:               "cancel <app/stack>",
 		Short:             "Cancel a running Pulumi operation",
 		Args:              cobra.ExactArgs(1),
-		ValidArgsFunction: completeTargets,
+		ValidArgsFunction: completeAppStacks,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s, err := getStore()
 			if err != nil {

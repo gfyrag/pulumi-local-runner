@@ -1,0 +1,118 @@
+name: membership
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: Formance Membership deployment (build image, deploy via Helm)
+x-plr-config:
+  source-repo:
+    type: string
+    default: "git@github.com:formancehq/membership-api.git"
+    description: Source repository URL (or local path) to clone for building the image
+  source-ref:
+    type: string
+    description: Git ref (branch, tag, or commit) to checkout in the source repository
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: Kubernetes namespace (defaults to stack name)
+  registry:
+    type: string
+    default: ghcr.io
+    description: Docker registry for building images
+  pull-registry:
+    type: string
+    description: Docker registry for pulling images (defaults to registry)
+  docker-builder-name:
+    type: string
+    description: Docker buildx builder name
+  imageTag:
+    type: string
+    description: Image tag (defaults to git version)
+  arch:
+    type: string
+    default: amd64
+    description: Target CPU architecture
+  registry-username:
+    type: string
+    secret: true
+    description: Docker registry username
+  registry-password:
+    type: string
+    secret: true
+    description: Docker registry password
+  debug:
+    type: boolean
+    default: false
+    description: Enable debug mode
+  domain:
+    type: string
+    required: true
+    description: Base domain for ingress hosts (e.g. example.formance.dev)
+  nats-url:
+    type: string
+    default: "nats://nats:4222"
+    description: NATS server URL
+  grpc-tokens:
+    type: array
+    description: "gRPC authentication tokens for agents (public regions)"
+  image-pull-secrets:
+    type: array
+    description: "Image pull secrets [{name: string}]"
+  ingress:
+    type: object
+    description: Membership ingress configuration
+    properties:
+      annotations:
+        type: object
+        description: Ingress annotations
+      className:
+        type: string
+        description: Ingress class name
+      tls:
+        type: array
+        description: TLS configuration
+        items:
+          type: object
+          properties:
+            secretName:
+              type: string
+              description: TLS secret name
+            hosts:
+              type: array
+              description: TLS hosts
+              items:
+                type: string
+  dex-ingress:
+    type: object
+    description: Dex ingress configuration
+    properties:
+      annotations:
+        type: object
+        description: Ingress annotations
+      className:
+        type: string
+        description: Ingress class name
+      tls:
+        type: array
+        description: TLS configuration
+        items:
+          type: object
+          properties:
+            secretName:
+              type: string
+              description: TLS secret name
+            hosts:
+              type: array
+              description: TLS hosts
+              items:
+                type: string
+  node-selector:
+    type: object
+    description: "Node selector for the membership pod"
+  tolerations:
+    type: array
+    description: "Tolerations for the membership pod"

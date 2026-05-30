@@ -34,19 +34,9 @@ func Step(format string, a ...any) {
 	dim.Printf("  "+format+"\n", a...)
 }
 
-// Success prints a success message.
-func Success(format string, a ...any) {
-	success.Printf("  ✓ "+format+"\n", a...)
-}
-
 // Warn prints a warning message.
 func Warn(format string, a ...any) {
 	warn.Printf("  ⚠ "+format+"\n", a...)
-}
-
-// Error prints an error message.
-func Error(format string, a ...any) {
-	fail.Printf("  ✗ "+format+"\n", a...)
 }
 
 // Result prints a summary line for a target result.

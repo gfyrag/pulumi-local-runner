@@ -1,0 +1,522 @@
+name: ledger-service
+runtime:
+  name: go
+  options:
+    buildTarget: ./bin/pulumi
+description: Deploy a LedgerService custom resource
+x-plr-config:
+  k8s-context:
+    type: string
+    required: true
+    description: Kubernetes context to use
+  namespace:
+    type: string
+    description: "Kubernetes namespace (defaults to 'default')"
+  name:
+    type: string
+    description: "LedgerService name (defaults to stack name)"
+  spec-file:
+    type: string
+    description: Path to YAML file containing LedgerService spec
+  spec:
+    type: object
+    description: "LedgerService custom resource spec (LedgerServiceSpec)"
+    properties:
+      image:
+        type: object
+        description: "Container image configuration"
+        properties:
+          repository: {type: string, description: "Image repository"}
+          tag: {type: string, description: "Image tag"}
+          pullPolicy: {type: string, description: "Pull policy (Always, IfNotPresent, Never)"}
+      imagePullSecrets:
+        type: array
+        description: "Private registry secrets [{name: string}]"
+      replicas:
+        type: integer
+        default: 3
+        description: "Number of Raft nodes (must be odd)"
+      serviceAccount:
+        type: object
+        description: "ServiceAccount configuration"
+        properties:
+          create: {type: boolean, description: "Create a service account"}
+          name: {type: string, description: "Override service account name"}
+          annotations: {type: object, description: "Service account annotations"}
+      podSecurityContext:
+        type: object
+        description: "Pod-level security context (k8s PodSecurityContext)"
+      securityContext:
+        type: object
+        description: "Container-level security context (k8s SecurityContext)"
+      clusterID: {type: string, description: "Cluster ID for inter-node validation", default: default}
+      bindAddr: {type: string, description: "Raft transport bind address", default: "0.0.0.0:7777"}
+      grpcPort: {type: integer, description: "gRPC service port", default: 8888}
+      httpPort: {type: integer, description: "HTTP service port", default: 9000}
+      walDir: {type: string, description: "WAL data directory", default: /data/raft}
+      dataDir: {type: string, description: "Application data directory", default: /data/app}
+      debug: {type: boolean, description: "Enable debug logging"}
+      restore: {type: boolean, description: "Start in restore mode"}
+      pebble:
+        type: object
+        description: "PebbleDB tuning parameters"
+        properties:
+          memTableSize: {type: string, description: "MemTable size (Kubernetes quantity, e.g. 256Mi)"}
+          memTableStopWritesThreshold: {type: integer, description: "MemTable count before writes stop"}
+          l0CompactionThreshold: {type: integer, description: "L0 file count to trigger compaction"}
+          l0StopWritesThreshold: {type: integer, description: "L0 file count before writes stop"}
+          lBaseMaxBytes: {type: string, description: "Maximum size of L1 (Kubernetes quantity, e.g. 256Mi)"}
+          cacheSize: {type: string, description: "Block cache size (Kubernetes quantity, e.g. 1Gi)"}
+          targetFileSize: {type: string, description: "Target SST file size (Kubernetes quantity, e.g. 64Mi)"}
+          bytesPerSync: {type: string, description: "Bytes written before sync during compaction (Kubernetes quantity, e.g. 512Ki)"}
+          walBytesPerSync: {type: string, description: "WAL bytes written before sync (Kubernetes quantity, e.g. 512Ki)"}
+          maxConcurrentCompactions: {type: integer, description: "Maximum concurrent compactions"}
+          walMinSyncInterval: {type: string, description: "Minimum interval between WAL syncs"}
+          disableWAL: {type: boolean, description: "Disable WAL entirely"}
+          incrementalCompactThreshold: {type: integer, description: "Entries before incremental compaction"}
+          maxCheckpoints: {type: integer, description: "Maximum number of Pebble checkpoints to keep (default: 10)"}
+          compression: {type: string, description: "Per-level compression (L0-L6, comma-separated: none|snappy|zstd|fastest|fast|balanced|good|default)"}
+          valueSeparation:
+            type: object
+            description: "Value separation for large values in blob files"
+            properties:
+              enabled: {type: boolean, description: "Enable value separation"}
+              minSize: {type: string, description: "Minimum value size for separation (Kubernetes quantity, default: 256)"}
+              maxDepth: {type: integer, description: "Max blob reference depth per SSTable (default: 4)"}
+              rewriteAge: {type: string, description: "Minimum blob file age before rewrite (default: 1h)"}
+              garbageRatio: {type: string, description: "Blob garbage ratio before rewrite (default: 0.20)"}
+      raft:
+        type: object
+        description: "Raft consensus parameters"
+        properties:
+          compactionMargin: {type: integer, description: "Compaction margin"}
+          maintenanceInterval: {type: string, description: "Interval for background WAL snapshot + Pebble checkpoint (default: 30s)"}
+          electionTick: {type: integer, description: "Election timeout in ticks"}
+          heartbeatTick: {type: integer, description: "Heartbeat interval in ticks"}
+          maxSizePerMsg: {type: string, description: "Maximum message size (Kubernetes quantity, e.g. 1Mi)"}
+          maxInflightMsgs: {type: integer, description: "Maximum in-flight messages"}
+          tickInterval: {type: string, description: "Interval between Raft ticks"}
+          proposeQueueCapacity: {type: integer, description: "Propose queue capacity"}
+          learnerPromotionThreshold: {type: integer, description: "Max log lag before auto-promoting a learner"}
+          replayBatchSize: {type: integer, description: "Raft log entries replayed per batch on startup"}
+          processingTickInterval: {type: string, description: "Interval for processing committed entries"}
+          transport:
+            type: object
+            description: "Transport queue configuration"
+            properties:
+              receptionQueues: {type: array, description: "Reception queue capacities per priority"}
+              sendQueues: {type: array, description: "Send queue capacities per priority"}
+              bufferSize: {type: string, description: "Per-peer send buffer capacity (Kubernetes quantity, e.g. 20Mi)"}
+      cache:
+        type: object
+        description: "Cache configuration"
+        properties:
+          rotationThreshold: {type: integer, description: "Raft log entries before cache rotation"}
+      health:
+        type: object
+        description: "Health check configuration"
+        properties:
+          interval: {type: string, description: "Interval between health checks"}
+          walThreshold: {type: string, description: "WAL volume usage threshold (0.0-1.0)"}
+          dataThreshold: {type: string, description: "Data volume usage threshold (0.0-1.0)"}
+          clockSkewThreshold: {type: string, description: "Maximum allowed clock skew"}
+      admissionMetrics: {type: boolean, description: "Enable admission path metrics"}
+      sentinelMode: {type: boolean, description: "Enable runtime volume consistency assertions"}
+      grpcCompression: {type: boolean, description: "Enable gzip compression on gRPC calls"}
+      queryProfileThreshold: {type: string, description: "Log queries exceeding this duration (0 to disable)"}
+      grpcSlowThreshold: {type: string, description: "Duration above which gRPC call is logged as slow"}
+      numscriptCacheSize: {type: integer, description: "Max parsed Numscript programs to cache (LRU)"}
+      mirrorMaxBatchSize: {type: integer, description: "Max batch size for mirror sync"}
+      idempotencyTTL: {type: string, description: "Idempotency key TTL (0 = never expire, default: 24h)"}
+      idempotencyEvictionInterval: {type: string, description: "Leader idempotency eviction interval (default: 60s)"}
+      hashAlgorithm: {type: string, description: "Hash algorithm for log chain (blake3 or xxh3, default: blake3)"}
+      unsafeSkipConfigValidation: {type: boolean, description: "Skip startup configuration safety checks (DANGEROUS)"}
+      receiptSigning:
+        type: object
+        description: "HMAC signing for JWT transaction receipts"
+        properties:
+          secretName: {type: string, description: "K8s secret containing the HMAC key"}
+          secretKey: {type: string, description: "Key in the secret", default: key}
+      bloom:
+        type: object
+        description: "Bloom filter configuration per attribute type (volumes, metadata, references, ledgers, boundaries, transactions)"
+        additionalProperties:
+          type: object
+          properties:
+            expectedKeys: {type: integer, description: "Expected unique keys (0 to disable)"}
+            fpRate: {type: string, description: "False positive rate (0.0-1.0)"}
+      coldStorage:
+        type: object
+        description: "Cold storage for period archival"
+        properties:
+          driver: {type: string, description: "Storage driver (filesystem or s3)"}
+          path: {type: string, description: "Base path for filesystem driver"}
+          bucketId: {type: string, description: "Shared namespace prefix for archives"}
+          s3:
+            type: object
+            description: "S3 configuration"
+            properties:
+              bucket: {type: string, description: "S3 bucket name"}
+              region: {type: string, description: "AWS region"}
+              endpoint: {type: string, description: "Custom S3 endpoint (for MinIO)"}
+      tls:
+        type: object
+        description: "TLS configuration for gRPC"
+        properties:
+          enabled: {type: boolean, description: "Enable TLS"}
+          secretName: {type: string, description: "K8s secret with TLS cert and key"}
+          caSecretKey: {type: string, description: "Key for CA certificate in the secret"}
+      responseSigning:
+        type: object
+        description: "Ed25519 response signing"
+        properties:
+          enabled: {type: boolean, description: "Enable response signing"}
+          secretName: {type: string, description: "K8s secret with Ed25519 seed"}
+          secretKey: {type: string, description: "Key in the secret", default: seed}
+      monitoring:
+        type: object
+        description: "OpenTelemetry observability configuration"
+        properties:
+          serviceName: {type: string, description: "Service name for telemetry", default: ledger}
+          attributes: {type: string, description: "Additional OTEL resource attributes"}
+          traces:
+            type: object
+            description: "Distributed tracing"
+            properties:
+              enabled: {type: boolean, description: "Enable tracing"}
+              exporter: {type: string, description: "Exporter type (e.g. otlp)"}
+              endpoint: {type: string, description: "Exporter endpoint"}
+              port: {type: string, description: "Exporter port"}
+              insecure: {type: string, description: "Disable TLS for exporter"}
+              mode: {type: string, description: "Exporter mode (e.g. grpc)"}
+              batch: {type: string, description: "Enable batch mode"}
+              sampling:
+                type: object
+                description: "Trace sampling"
+                properties:
+                  enabled: {type: boolean, description: "Enable error-aware sampling"}
+                  successRatio: {type: string, description: "Sampling ratio for successful traces"}
+          metrics:
+            type: object
+            description: "Metrics export"
+            properties:
+              enabled: {type: boolean, description: "Enable metrics"}
+              exporter: {type: string, description: "Exporter type"}
+              endpoint: {type: string, description: "Exporter endpoint"}
+              port: {type: string, description: "Exporter port"}
+              insecure: {type: string, description: "Disable TLS for exporter"}
+              mode: {type: string, description: "Exporter mode"}
+              keepInMemory: {type: boolean, description: "Keep metrics in memory"}
+              exporterPushInterval: {type: string, description: "Push interval"}
+              runtime: {type: boolean, description: "Enable runtime metrics"}
+              runtimeMinimumReadMemStatsInterval: {type: string, description: "Min interval for reading mem stats"}
+          logs:
+            type: object
+            description: "Log export"
+            properties:
+              enabled: {type: boolean, description: "Enable log exporting"}
+              level: {type: string, description: "Log level"}
+              exporter: {type: string, description: "Exporter type"}
+              endpoint: {type: string, description: "Exporter endpoint"}
+              port: {type: string, description: "Exporter port"}
+              insecure: {type: string, description: "Disable TLS for exporter"}
+              mode: {type: string, description: "Exporter mode"}
+          pyroscope:
+            type: object
+            description: "Pyroscope continuous profiling"
+            properties:
+              enabled: {type: boolean, description: "Enable Pyroscope"}
+              serverAddress: {type: string, description: "Pyroscope server address"}
+              applicationName: {type: string, description: "Application name override"}
+              authToken: {type: string, description: "Authentication token"}
+              tenantId: {type: string, description: "Multi-tenant tenant ID"}
+              basicAuthUser: {type: string, description: "Basic auth username"}
+              basicAuthPassword: {type: string, description: "Basic auth password"}
+              uploadRate: {type: string, description: "Upload interval"}
+              tags: {type: string, description: "Tags in key=value format"}
+              profileTypes: {type: string, description: "Profile types to collect"}
+              mutexProfileFraction: {type: integer, description: "Mutex profile fraction"}
+              blockProfileRate: {type: integer, description: "Block profile rate"}
+              disableGCRuns: {type: boolean, description: "Disable GC runs"}
+          flightRecorder:
+            type: object
+            description: "Runtime flight recorder"
+            properties:
+              enabled: {type: boolean, description: "Enable flight recorder"}
+              minAge: {type: string, description: "Minimum duration of retained trace data"}
+              maxBytes: {type: string, description: "Maximum memory for buffer (Kubernetes quantity, e.g. 10Mi)"}
+      auth:
+        type: object
+        description: "Authentication and authorization"
+        properties:
+          enabled: {type: boolean, description: "Enable authentication"}
+          issuer: {type: string, description: "OIDC token issuer URL (backward compat)"}
+          issuers: {type: array, description: "Trusted OIDC issuers"}
+          service: {type: string, description: "Scope prefix (e.g. ledger)"}
+          checkScopes: {type: boolean, description: "Enable scope checking"}
+          readKeySetMaxRetries: {type: integer, description: "Max retries for reading key sets"}
+          scopeMapping: {type: object, description: "Map of virtual scopes to granular scopes"}
+      readIndex:
+        type: object
+        description: "Pebble read index configuration"
+        properties:
+          batchSize: {type: integer, description: "Entries per Pebble batch commit"}
+          pebble:
+            type: object
+            description: "Pebble tunables for the read index (same knobs as primary store)"
+      service:
+        type: object
+        description: "ClusterIP service configuration"
+        properties:
+          type: {type: string, description: "Service type", default: ClusterIP}
+          httpPort: {type: integer, description: "HTTP service port", default: 9000}
+          grpcPort: {type: integer, description: "gRPC service port", default: 8888}
+          raftPort: {type: integer, description: "Raft transport port", default: 7777}
+          annotations: {type: object, description: "Service annotations"}
+      headlessService:
+        type: object
+        description: "Headless service for Raft peer discovery"
+        properties:
+          enabled: {type: boolean, description: "Enable headless service", default: true}
+          annotations: {type: object, description: "Headless service annotations"}
+      ingress:
+        type: object
+        description: "HTTP Ingress configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable HTTP Ingress"}
+          className: {type: string, description: "Ingress class name"}
+          annotations: {type: object, description: "Ingress annotations"}
+          hosts: {type: array, description: "Host rules [{host, paths: [{path, pathType}]}]"}
+          tls: {type: array, description: "TLS configuration [{hosts: [], secretName}]"}
+      ingressGrpc:
+        type: object
+        description: "gRPC Ingress configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable gRPC Ingress"}
+          className: {type: string, description: "Ingress class name"}
+          annotations: {type: object, description: "Ingress annotations"}
+          hosts: {type: array, description: "Host rules [{host, paths: [{path, pathType}]}]"}
+          tls: {type: array, description: "TLS configuration"}
+          targetGroupBinding:
+            type: object
+            description: "AWS TargetGroupBinding"
+            properties:
+              enabled: {type: boolean, description: "Enable TargetGroupBinding"}
+              targetGroupARN: {type: string, description: "ARN of the target group"}
+              targetType: {type: string, description: "instance or ip", default: ip}
+              networking: {type: object, description: "Networking configuration (raw JSON)"}
+      persistence:
+        type: object
+        description: "Storage configuration"
+        properties:
+          wal:
+            type: object
+            description: "WAL volume"
+            properties:
+              storageClass: {type: string, description: "Storage class name"}
+              accessMode: {type: string, description: "PVC access mode", default: ReadWriteOnce}
+              size: {type: string, description: "Volume size (e.g. 5Gi)"}
+              volumeAttributesClassName: {type: string, description: "VolumeAttributesClass name for the PVC (K8s 1.31+)"}
+          data:
+            type: object
+            description: "Data volume"
+            properties:
+              storageClass: {type: string, description: "Storage class name"}
+              accessMode: {type: string, description: "PVC access mode", default: ReadWriteOnce}
+              size: {type: string, description: "Volume size (e.g. 10Gi)"}
+              volumeAttributesClassName: {type: string, description: "VolumeAttributesClass name for the PVC (K8s 1.31+)"}
+          coldCache:
+            type: object
+            description: "Cold storage cache volume"
+            properties:
+              storageClass: {type: string, description: "Storage class name"}
+              accessMode: {type: string, description: "PVC access mode", default: ReadWriteOnce}
+              size: {type: string, description: "Volume size (e.g. 10Gi)"}
+              volumeAttributesClassName: {type: string, description: "VolumeAttributesClass name for the PVC (K8s 1.31+)"}
+          retentionPolicy:
+            type: object
+            description: "PVC retention policy"
+            properties:
+              whenScaled: {type: string, description: "Policy when scaled down (Retain or Delete)", default: Retain}
+              whenDeleted: {type: string, description: "Policy when deleted (Retain or Delete)", default: Retain}
+      goMemLimitRatio:
+        type: integer
+        description: "Percentage of memory limit used for GOMEMLIMIT (0-100, default: 90)"
+      resources:
+        type: object
+        description: "Container resource requirements"
+        properties:
+          limits:
+            type: object
+            properties:
+              cpu: {type: string, description: "CPU limit"}
+              memory: {type: string, description: "Memory limit"}
+          requests:
+            type: object
+            properties:
+              cpu: {type: string, description: "CPU request"}
+              memory: {type: string, description: "Memory request"}
+      podAnnotations:
+        type: object
+        description: "Annotations to add to each pod"
+      nodeSelector:
+        type: object
+        description: "Node selector key-value map"
+      tolerations:
+        type: array
+        description: "Pod tolerations"
+      affinity:
+        type: object
+        description: "Pod affinity rules (k8s Affinity)"
+      podAntiAffinity:
+        type: object
+        description: "Pod anti-affinity configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable pod anti-affinity", default: true}
+          type: {type: string, description: "soft or hard", default: soft}
+          weight: {type: integer, description: "Weight for soft anti-affinity (1-100)", default: 100}
+          topologyKey: {type: string, description: "Topology key", default: "kubernetes.io/hostname"}
+      podDisruptionBudget:
+        type: object
+        description: "PodDisruptionBudget configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable PDB"}
+          minAvailable: {type: integer, description: "Minimum available pods"}
+          maxUnavailable: {type: integer, description: "Maximum unavailable pods"}
+      serviceMonitor:
+        type: object
+        description: "Prometheus ServiceMonitor configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable ServiceMonitor"}
+          interval: {type: string, description: "Scrape interval"}
+          scrapeTimeout: {type: string, description: "Scrape timeout"}
+          labels: {type: object, description: "Labels for the ServiceMonitor"}
+          relabelings: {type: array, description: "Relabeling rules"}
+          metricRelabelings: {type: array, description: "Metric relabeling rules"}
+      networkPolicy:
+        type: object
+        description: "Egress NetworkPolicy configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable NetworkPolicy"}
+          externalCIDRExcept: {type: array, description: "RFC1918 CIDR blocks excluded from external egress"}
+          additionalEgress: {type: array, description: "Custom egress rules"}
+      dnsEndpoint:
+        type: object
+        description: "ExternalDNS DNSEndpoint configuration"
+        properties:
+          enabled: {type: boolean, description: "Enable DNSEndpoint"}
+          annotations: {type: object, description: "DNSEndpoint annotations"}
+          endpoints: {type: array, description: "DNS endpoint entries [{dnsName, recordType, targets, recordTTL, providerSpecific}]"}
+      livenessProbe:
+        type: object
+        description: "Liveness probe override (merged with defaults: httpGet /livez, period 10s, failure 3)"
+        properties:
+          httpGet:
+            type: object
+            description: "HTTP GET probe"
+            properties:
+              path: {type: string, description: "Request path"}
+              port: {type: string, description: "Port name or number"}
+              scheme: {type: string, description: "HTTP or HTTPS"}
+          exec:
+            type: object
+            description: "Exec probe"
+            properties:
+              command: {type: array, description: "Command to execute"}
+          tcpSocket:
+            type: object
+            description: "TCP socket probe"
+            properties:
+              port: {type: string, description: "Port name or number"}
+          grpc:
+            type: object
+            description: "gRPC probe"
+            properties:
+              port: {type: integer, description: "gRPC port"}
+              service: {type: string, description: "gRPC service name"}
+          initialDelaySeconds: {type: integer, description: "Delay before first probe"}
+          timeoutSeconds: {type: integer, description: "Probe timeout"}
+          periodSeconds: {type: integer, description: "Interval between probes"}
+          successThreshold: {type: integer, description: "Consecutive successes to be healthy"}
+          failureThreshold: {type: integer, description: "Consecutive failures to be unhealthy"}
+      readinessProbe:
+        type: object
+        description: "Readiness probe override (merged with defaults: httpGet /readyz, period 5s, failure 3)"
+        properties:
+          httpGet:
+            type: object
+            properties:
+              path: {type: string, description: "Request path"}
+              port: {type: string, description: "Port name or number"}
+              scheme: {type: string, description: "HTTP or HTTPS"}
+          exec:
+            type: object
+            properties:
+              command: {type: array, description: "Command to execute"}
+          tcpSocket:
+            type: object
+            properties:
+              port: {type: string, description: "Port name or number"}
+          grpc:
+            type: object
+            properties:
+              port: {type: integer, description: "gRPC port"}
+              service: {type: string, description: "gRPC service name"}
+          initialDelaySeconds: {type: integer, description: "Delay before first probe"}
+          timeoutSeconds: {type: integer, description: "Probe timeout"}
+          periodSeconds: {type: integer, description: "Interval between probes"}
+          successThreshold: {type: integer, description: "Consecutive successes to be ready"}
+          failureThreshold: {type: integer, description: "Consecutive failures to be not ready"}
+      startupProbe:
+        type: object
+        description: "Startup probe override (merged with defaults: httpGet /livez, period 10s, failure 30 = 5min)"
+        properties:
+          httpGet:
+            type: object
+            properties:
+              path: {type: string, description: "Request path"}
+              port: {type: string, description: "Port name or number"}
+              scheme: {type: string, description: "HTTP or HTTPS"}
+          exec:
+            type: object
+            properties:
+              command: {type: array, description: "Command to execute"}
+          tcpSocket:
+            type: object
+            properties:
+              port: {type: string, description: "Port name or number"}
+          grpc:
+            type: object
+            properties:
+              port: {type: integer, description: "gRPC port"}
+              service: {type: string, description: "gRPC service name"}
+          initialDelaySeconds: {type: integer, description: "Delay before first probe"}
+          timeoutSeconds: {type: integer, description: "Probe timeout"}
+          periodSeconds: {type: integer, description: "Interval between probes"}
+          successThreshold: {type: integer, description: "Consecutive successes to be started"}
+          failureThreshold: {type: integer, description: "Consecutive failures to kill container"}
+  backup:
+    type: object
+    description: "LedgerBackup configuration (creates a LedgerBackup CR alongside the LedgerService)"
+    properties:
+      destination:
+        type: object
+        description: "Where backups are stored"
+        properties:
+          driver: {type: string, description: "Backup storage driver", default: s3}
+          bucketId: {type: string, description: "Namespace prefix for backup files (defaults to cluster-id)"}
+          s3:
+            type: object
+            description: "S3 configuration"
+            properties:
+              bucket: {type: string, description: "S3 bucket name"}
+              region: {type: string, description: "AWS region"}
+              endpoint: {type: string, description: "Custom S3 endpoint (for MinIO)"}
+          s3AccessKeyId: {type: string, description: "Static AWS access key ID (optional, defaults to credential chain)"}
+          s3SecretAccessKey: {type: string, secret: true, description: "Static AWS secret access key (optional)"}
+      schedule:
+        type: object
+        description: "Cron schedules for backups"
+        properties:
+          full: {type: string, description: "Cron expression for full backups (e.g. '0 2 * * 0')"}
+          incremental: {type: string, description: "Cron expression for incremental backups (e.g. '0 * * * *')"}

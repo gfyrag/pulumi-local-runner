@@ -79,10 +79,6 @@ func (s *S3Store) stackFileKey(appName, stackName string) string {
 	return s.key("apps", appName, fmt.Sprintf("%s.yaml", stackName))
 }
 
-func (s *S3Store) stackConfigKey(appName, stackName string) string {
-	return s.stackFileKey(appName, stackName)
-}
-
 func (s *S3Store) getObject(ctx context.Context, key string) ([]byte, error) {
 	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
@@ -244,7 +240,7 @@ func (s *S3Store) SaveConfig(cfg *config.Config) error {
 }
 
 func (s *S3Store) ReadStackConfig(appName, stackName string) ([]byte, error) {
-	data, err := s.getObject(context.Background(), s.stackConfigKey(appName, stackName))
+	data, err := s.getObject(context.Background(), s.stackFileKey(appName, stackName))
 	if err != nil {
 		return nil, fmt.Errorf("reading stack config from S3: %w", err)
 	}
@@ -281,7 +277,7 @@ func (s *S3Store) WriteStackConfig(appName, stackName string, data []byte) error
 
 	// Read existing file to preserve definition fields
 	var sf config.StackFile
-	if existing, err := s.getObject(ctx, s.stackConfigKey(appName, stackName)); err == nil && existing != nil {
+	if existing, err := s.getObject(ctx, s.stackFileKey(appName, stackName)); err == nil && existing != nil {
 		yaml.Unmarshal(existing, &sf)
 	}
 
@@ -301,7 +297,7 @@ func (s *S3Store) WriteStackConfig(appName, stackName string, data []byte) error
 		return fmt.Errorf("marshaling stack file: %w", err)
 	}
 
-	if err := s.putObject(ctx, s.stackConfigKey(appName, stackName), out); err != nil {
+	if err := s.putObject(ctx, s.stackFileKey(appName, stackName), out); err != nil {
 		return fmt.Errorf("writing stack config to S3: %w", err)
 	}
 	return nil
