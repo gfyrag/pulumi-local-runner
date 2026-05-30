@@ -35,11 +35,4 @@ type Store interface {
 
 	// DeleteBaseConfig removes a named base.
 	DeleteBaseConfig(name string) error
-
-	// ReadActiveEnv returns the currently active environment.
-	// Returns "", nil if not set.
-	ReadActiveEnv() (string, error)
-
-	// WriteActiveEnv stores the active environment.
-	WriteActiveEnv(env string) error
 }

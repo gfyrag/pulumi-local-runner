@@ -166,13 +166,8 @@ func (s *S3Store) LoadConfig() (*config.Config, error) {
 				if err := yaml.Unmarshal(data, &sf); err != nil {
 					return nil, fmt.Errorf("parsing stack %s/%s: %w", appName, stackName, err)
 				}
-				env := sf.Env
-				if env == "" {
-					env = "default"
-				}
 				app.Stacks = append(app.Stacks, config.Stack{
 					Name:      stackName,
-					Env:       env,
 					Repo:      sf.Repo,
 					Path:      sf.Path,
 					Branch:    sf.Branch,
@@ -215,7 +210,6 @@ func (s *S3Store) SaveConfig(cfg *config.Config) error {
 			}
 
 			sf := config.StackFile{
-				Env:       stack.Env,
 				Repo:      stack.Repo,
 				Path:      stack.Path,
 				Branch:    stack.Branch,
@@ -343,24 +337,6 @@ func (s *S3Store) ListBases() ([]string, error) {
 		}
 	}
 	return names, nil
-}
-
-func (s *S3Store) ReadActiveEnv() (string, error) {
-	data, err := s.getObject(context.Background(), s.key("active-env"))
-	if err != nil {
-		return "", fmt.Errorf("reading active env from S3: %w", err)
-	}
-	if data == nil {
-		return "", nil
-	}
-	return strings.TrimSpace(string(data)), nil
-}
-
-func (s *S3Store) WriteActiveEnv(env string) error {
-	if err := s.putObject(context.Background(), s.key("active-env"), []byte(env+"\n")); err != nil {
-		return fmt.Errorf("writing active env to S3: %w", err)
-	}
-	return nil
 }
 
 func (s *S3Store) DeleteBaseConfig(name string) error {

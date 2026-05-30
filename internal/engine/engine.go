@@ -52,9 +52,8 @@ func (o Operation) String() string {
 }
 
 // ResolveTargets parses arguments like "networking", "networking/dev" into targets.
-// If no args are given, stacks are filtered by env (empty env = all stacks).
-// If args are given, env filter is ignored (explicit targets win).
-func ResolveTargets(cfg *config.Config, args []string, env string) ([]Target, error) {
+// If no args are given, all stacks are selected.
+func ResolveTargets(cfg *config.Config, args []string) ([]Target, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid config: %w", err)
 	}
@@ -63,9 +62,6 @@ func ResolveTargets(cfg *config.Config, args []string, env string) ([]Target, er
 		var targets []Target
 		for i := range cfg.Apps {
 			for j := range cfg.Apps[i].Stacks {
-				if env != "" && cfg.Apps[i].Stacks[j].Env != env {
-					continue
-				}
 				targets = append(targets, Target{
 					App:   &cfg.Apps[i],
 					Stack: &cfg.Apps[i].Stacks[j],

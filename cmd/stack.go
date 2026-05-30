@@ -31,7 +31,7 @@ func init() {
 	rootCmd.AddCommand(stackCmd)
 
 	// stack add
-	var branch, ref, org, addEnv string
+	var branch, ref, org string
 	var dependsOn, bases []string
 	addCmd := &cobra.Command{
 		Use:               "add <app> <name>",
@@ -63,17 +63,8 @@ func init() {
 				return fmt.Errorf("--branch and --ref are mutually exclusive")
 			}
 
-			env := addEnv
-			if env == "" {
-				env = resolveEnv()
-			}
-			if env == "" {
-				env = "default"
-			}
-
 			stack := config.Stack{
 				Name:      name,
-				Env:       env,
 				Branch:    branch,
 				Ref:       ref,
 				DependsOn: dependsOn,
@@ -94,7 +85,6 @@ func init() {
 	addCmd.Flags().StringSliceVar(&dependsOn, "depends-on", nil, "Dependencies (app/stack format)")
 	addCmd.Flags().StringVar(&org, "org", "", "Pulumi Cloud organization (enables fully qualified stack names)")
 	addCmd.Flags().StringSliceVar(&bases, "bases", nil, "Base configs to apply (ordered)")
-	addCmd.Flags().StringVar(&addEnv, "env", "", "Environment (defaults to active env or 'default')")
 	stackCmd.AddCommand(addCmd)
 
 	// stack list
@@ -130,16 +120,9 @@ func init() {
 				return strings.Compare(a.Name, b.Name)
 			})
 
-			filterEnv := resolveEnv()
 			first := true
 			for _, app := range apps {
-				var stacks []config.Stack
-				for _, st := range app.Stacks {
-					if filterEnv != "" && st.Env != filterEnv {
-						continue
-					}
-					stacks = append(stacks, st)
-				}
+				stacks := app.Stacks
 				if len(stacks) == 0 {
 					continue
 				}
@@ -163,9 +146,6 @@ func init() {
 					fmt.Print("  ")
 					stackRef.Printf("%-20s", st.Name)
 					stackMeta.Print(ref)
-					if st.Env != "" && st.Env != "default" {
-						stackMeta.Printf("  env:%s", st.Env)
-					}
 					if st.Org != "" {
 						stackMeta.Printf("  org:%s", st.Org)
 					}
@@ -365,48 +345,6 @@ func init() {
 			}
 
 			fmt.Printf("Renamed stack %s/%s → %s/%s\n", app.Name, oldName, app.Name, newName)
-			return nil
-		},
-	})
-
-	// stack move
-	stackCmd.AddCommand(&cobra.Command{
-		Use:               "move <app/stack> <env>",
-		Short:             "Move a stack to another environment",
-		Args:              cobra.ExactArgs(2),
-		ValidArgsFunction: completeAppStacks,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			appName, stackName, err := splitAppStack(args[0])
-			if err != nil {
-				return err
-			}
-
-			s, err := getStore()
-			if err != nil {
-				return err
-			}
-
-			cfg, err := s.LoadConfig()
-			if err != nil {
-				return err
-			}
-
-			app, err := cfg.FindApp(appName)
-			if err != nil {
-				return err
-			}
-
-			stack, err := app.FindStack(stackName)
-			if err != nil {
-				return err
-			}
-
-			stack.Env = args[1]
-			if err := s.SaveConfig(cfg); err != nil {
-				return err
-			}
-
-			fmt.Printf("Moved %s to environment %q\n", args[0], args[1])
 			return nil
 		},
 	})

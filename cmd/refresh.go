@@ -21,7 +21,7 @@ func init() {
 			if err != nil {
 				return err
 			}
-			targets, err := engine.ResolveTargets(cfg, args, resolveEnv())
+			targets, err := engine.ResolveTargets(cfg, args)
 			if err != nil {
 				return err
 			}
