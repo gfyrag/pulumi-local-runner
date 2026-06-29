@@ -23,16 +23,12 @@ func main() {
 			return fmt.Errorf("failed to read k6 Operator values: %w", err)
 		}
 
-		// Disable namespace creation — the namespace is managed externally
-		if values == nil {
-			values = make(map[string]any)
-		}
-		ns, _ := values["namespace"].(map[string]any)
-		if ns == nil {
-			ns = make(map[string]any)
-		}
-		ns["create"] = false
-		values["namespace"] = ns
+		// The k6-operator chart hardcodes its workloads (CRDs, RBAC, manager
+		// Deployment) into a `<release-name>-system` namespace that it creates
+		// itself when `namespace.create=true` (chart default). It does not
+		// expose a way to redirect those resources to another namespace, so we
+		// let the chart manage that namespace and only use `Namespace` below
+		// for the release storage object.
 
 		release, err := helm.NewRelease(ctx, "k6-operator", &helm.ReleaseArgs{
 			Name:           pulumi.String("k6-operator"),
