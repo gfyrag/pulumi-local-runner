@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"
 
-	"github.com/formancehq/ledger-v3-poc/deployments/devenv/shared"
+	"github.com/gfyrag/pulumi-local-runner/apps/shared"
 )
 
 // k8sSetup holds the common Kubernetes provider and namespace setup.

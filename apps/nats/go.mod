@@ -1,11 +1,11 @@
-module github.com/formancehq/ledger-v3-poc/deployments/devenv/monitoring/nats
+module github.com/gfyrag/pulumi-local-runner/apps/nats
 
 go 1.26.2
 
-replace github.com/formancehq/ledger-v3-poc/deployments/devenv/shared => ../shared
+replace github.com/gfyrag/pulumi-local-runner/apps/shared => ../shared
 
 require (
-	github.com/formancehq/ledger-v3-poc/deployments/devenv/shared v0.0.0-00010101000000-000000000000
+	github.com/gfyrag/pulumi-local-runner/apps/shared v0.0.0-00010101000000-000000000000
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.30.0
 	github.com/pulumi/pulumi/sdk/v3 v3.242.0
 )

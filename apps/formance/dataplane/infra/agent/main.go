@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/formancehq/ledger-v3-poc/deployments/devenv/shared"
+	"github.com/gfyrag/pulumi-local-runner/apps/shared"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi/config"

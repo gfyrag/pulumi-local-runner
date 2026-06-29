@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/formancehq/ledger-v3-poc/deployments/devenv/shared"
+	"github.com/gfyrag/pulumi-local-runner/apps/shared"
 	v1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
 	metav1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
@@ -28,7 +28,7 @@ func main() {
 
 		sourceRepo := cfg.Get("source-repo")
 		if sourceRepo == "" {
-			sourceRepo = "git@github.com:formancehq/ledger-v3-poc.git"
+			sourceRepo = "git@github.com:formancehq/ledger.git"
 		}
 		sourceRef := cfg.Get("source-ref")
 

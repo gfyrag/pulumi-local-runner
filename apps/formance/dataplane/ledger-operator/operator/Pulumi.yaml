@@ -7,7 +7,7 @@ description: Ledger operator deployment (CRDs, operator)
 x-plr-config:
   source-repo:
     type: string
-    default: "git@github.com:formancehq/ledger-v3-poc.git"
+    default: "git@github.com:formancehq/ledger.git"
     description: Git URL or local path of the operator source repository
   source-ref:
     type: string

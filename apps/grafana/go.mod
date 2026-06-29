@@ -1,11 +1,11 @@
-module github.com/formancehq/ledger-v3-poc/deployments/devenv/monitoring/grafana
+module github.com/gfyrag/pulumi-local-runner/apps/grafana
 
 go 1.26.0
 
-replace github.com/formancehq/ledger-v3-poc/deployments/devenv/shared => ../shared
+replace github.com/gfyrag/pulumi-local-runner/apps/shared => ../shared
 
 require (
-	github.com/formancehq/ledger-v3-poc/deployments/devenv/shared v0.0.0
+	github.com/gfyrag/pulumi-local-runner/apps/shared v0.0.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.24.1
 	github.com/pulumi/pulumi/sdk/v3 v3.242.0
 )

@@ -1,4 +1,4 @@
-module github.com/formancehq/ledger-v3-poc/deployments/devenv/shared
+module github.com/gfyrag/pulumi-local-runner/apps/shared
 
 go 1.26.0
 
