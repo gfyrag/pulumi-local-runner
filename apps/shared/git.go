@@ -47,7 +47,7 @@ func CloneSourceRepo(repoURL, ref string) (string, error) {
 		}
 	} else {
 		fmt.Printf("Fetching updates for %s...\n", repoName)
-		if err := RunGit("-C", repoDir, "fetch", "--all", "--tags", "--prune"); err != nil {
+		if err := RunGit("-C", repoDir, "fetch", "--all", "--tags", "--prune", "--force"); err != nil {
 			return "", fmt.Errorf("fetching %s: %w", repoURL, err)
 		}
 	}

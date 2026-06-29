@@ -26,16 +26,28 @@ func main() {
 		namespace := k8s.Namespace
 		k8sProvider := k8s.Provider
 
-		dc := shared.NewDockerConfig(ctx, cfg, "../../../..")
+		sourceRepo := cfg.Get("source-repo")
+		if sourceRepo == "" {
+			sourceRepo = "git@github.com:formancehq/ledger-v3-poc.git"
+		}
+		sourceRef := cfg.Get("source-ref")
+
+		sourceDir, err := shared.CloneSourceRepo(sourceRepo, sourceRef)
+		if err != nil {
+			return fmt.Errorf("failed to clone source repo: %w", err)
+		}
+		operatorSrc := filepath.Join(sourceDir, "misc", "operator")
+
+		dc := shared.NewDockerConfig(ctx, cfg, sourceDir)
 
 		// Build operator image
-		ledgerOperatorImage, err := dc.BuildImage(ctx, "formancehq/ledger-operator", "../..", "../../Dockerfile")
+		ledgerOperatorImage, err := dc.BuildImage(ctx, "formancehq/ledger-operator", operatorSrc, filepath.Join(operatorSrc, "Dockerfile"))
 		if err != nil {
 			return fmt.Errorf("failed to build ledger operator image: %w", err)
 		}
 
 		// Apply CRDs
-		crdFiles, err := filepath.Glob(filepath.Join("..", "..", "helm", "crds", "templates", "*.yaml"))
+		crdFiles, err := filepath.Glob(filepath.Join(operatorSrc, "helm", "crds", "templates", "*.yaml"))
 		if err != nil {
 			return fmt.Errorf("failed to glob CRD files: %w", err)
 		}
@@ -66,30 +78,65 @@ func main() {
 			ledgerImageTag = "latest"
 		}
 
+		// Operator runtime configuration
+		imagePullPolicy := cfg.Get("image-pull-policy")
+		if imagePullPolicy == "" {
+			imagePullPolicy = "IfNotPresent"
+		}
+		replicaCount := 1
+		if v, err := cfg.TryInt("replicaCount"); err == nil {
+			replicaCount = v
+		}
+		leaderElection := true
+		if v, err := cfg.TryBool("leaderElection"); err == nil {
+			leaderElection = v
+		}
+		var watchNamespace pulumi.StringInput = namespace.Metadata.Name().Elem()
+		if v := cfg.Get("watchNamespace"); v != "" {
+			watchNamespace = pulumi.String(v)
+		}
+
 		// Deploy ledger operator
-		operatorChartPath := filepath.Join("..", "..", "helm", "operator")
+		operatorChartPath := filepath.Join(operatorSrc, "helm", "operator")
+
+		helmValues := pulumi.Map{
+			"image": pulumi.Map{
+				"repository": pulumi.Sprintf("%s/formancehq/ledger-operator", dc.PullRegistry),
+				"tag":        pulumi.Sprintf("latest@%s", ledgerOperatorImage.Digest),
+				"pullPolicy": pulumi.String(imagePullPolicy),
+			},
+			"ledgerImage": pulumi.Map{
+				"registry": pulumi.String(ledgerImageRegistry),
+				"name":     pulumi.String(ledgerImageName),
+				"tag":      pulumi.String(ledgerImageTag),
+			},
+			"imagePullSecrets": shared.GetImagePullSecrets(cfg),
+			"replicaCount":     pulumi.Int(replicaCount),
+			"leaderElection":   pulumi.Bool(leaderElection),
+			"watchNamespace":   watchNamespace,
+			"nodeSelector":     shared.GetConfigMap(cfg, "node-selector"),
+			"tolerations":      shared.GetConfigArray(cfg, "tolerations"),
+			"ledger-operator-crds": pulumi.Map{
+				"create": pulumi.Bool(false),
+			},
+		}
+		if v := shared.GetConfigMap(cfg, "resources"); len(v) > 0 {
+			helmValues["resources"] = v
+		}
+		if v := shared.GetConfigMap(cfg, "serviceAccount"); len(v) > 0 {
+			helmValues["serviceAccount"] = v
+		}
+		if v := shared.GetConfigMap(cfg, "pvcProtection"); len(v) > 0 {
+			helmValues["pvcProtection"] = v
+		}
 
 		ledgerOperator, err := helm.NewRelease(ctx, "ledger-operator", &helm.ReleaseArgs{
-			Name:      pulumi.String("ledger-operator"),
-			Chart:     pulumi.String(operatorChartPath),
-			Namespace: namespace.Metadata.Name(),
-			Values: pulumi.Map{
-				"image": pulumi.Map{
-					"repository": pulumi.Sprintf("%s/formancehq/ledger-operator", dc.PullRegistry),
-					"tag":        pulumi.Sprintf("latest@%s", ledgerOperatorImage.Digest),
-				},
-				"ledgerImage": pulumi.Map{
-					"registry": pulumi.String(ledgerImageRegistry),
-					"name":     pulumi.String(ledgerImageName),
-					"tag":      pulumi.String(ledgerImageTag),
-				},
-				"imagePullSecrets": shared.GetImagePullSecrets(cfg),
-				"leaderElection":   pulumi.Bool(true),
-				"watchNamespace":   namespace.Metadata.Name(),
-				"nodeSelector":     shared.GetConfigMap(cfg, "node-selector"),
-				"tolerations":      shared.GetConfigArray(cfg, "tolerations"),
-			},
-			ForceUpdate: pulumi.Bool(true),
+			Name:             pulumi.String("ledger-operator"),
+			Chart:            pulumi.String(operatorChartPath),
+			Namespace:        namespace.Metadata.Name(),
+			Values:           helmValues,
+			ForceUpdate:      pulumi.Bool(true),
+			DependencyUpdate: pulumi.Bool(true),
 		},
 			pulumi.DependsOn(append([]pulumi.Resource{namespace, ledgerOperatorImage.Resource()}, ledgerCRDs...)),
 			pulumi.Provider(k8sProvider),

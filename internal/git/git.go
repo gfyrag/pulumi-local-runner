@@ -57,7 +57,9 @@ func WorkDir(app *config.App) (string, error) {
 }
 
 // Sync clones the repo if it doesn't exist, fetches updates, and checks out the given ref.
-// For local repos, it skips clone/fetch and only checks out the requested ref (if any).
+// For local repos, it never mutates the working tree: it only verifies HEAD matches the
+// requested ref and returns a clear error otherwise, so plr never blows away uncommitted
+// work or detaches the user's branch.
 func Sync(s store.Store, app *config.App, stack *config.Stack) error {
 	repo := config.EffectiveRepo(app, stack)
 	repoDir, err := RepoDirForStack(app, stack)
@@ -66,25 +68,23 @@ func Sync(s store.Store, app *config.App, stack *config.Stack) error {
 	}
 
 	if IsLocalRepo(repo) {
-		if err := checkout(repoDir, stack); err != nil {
-			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
+		return verifyLocalRef(repoDir, stack)
+	}
+
+	if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
+		ui.Info("Cloning %s...", repo)
+		if err := runGit("clone", repo, repoDir); err != nil {
+			return fmt.Errorf("cloning %s: %w", repo, err)
 		}
 	} else {
-		if _, err := os.Stat(filepath.Join(repoDir, ".git")); os.IsNotExist(err) {
-			ui.Info("Cloning %s...", repo)
-			if err := runGit("clone", repo, repoDir); err != nil {
-				return fmt.Errorf("cloning %s: %w", repo, err)
-			}
-		} else {
-			ui.Step("Fetching updates...")
-			if err := runGit("-C", repoDir, "fetch", "--all", "--tags", "--prune"); err != nil {
-				return fmt.Errorf("fetching %s: %w", repo, err)
-			}
+		ui.Step("Fetching updates...")
+		if err := runGit("-C", repoDir, "fetch", "--all", "--tags", "--prune"); err != nil {
+			return fmt.Errorf("fetching %s: %w", repo, err)
 		}
+	}
 
-		if err := checkout(repoDir, stack); err != nil {
-			return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
-		}
+	if err := checkout(repoDir, stack); err != nil {
+		return fmt.Errorf("checking out ref for stack %q: %w", stack.Name, err)
 	}
 
 	return nil
@@ -98,6 +98,43 @@ func runGit(args ...string) error {
 		return fmt.Errorf("git %s: %w", args[0], err)
 	}
 	return nil
+}
+
+// verifyLocalRef checks that a local repo's HEAD already points at the stack's requested
+// ref without modifying the working tree. If no ref is configured, accepts whatever the
+// user has checked out.
+func verifyLocalRef(repoDir string, stack *config.Stack) error {
+	ref := stack.Branch
+	if stack.Ref != "" {
+		ref = stack.Ref
+	}
+	if ref == "" {
+		return nil
+	}
+
+	headOut, err := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return fmt.Errorf("reading HEAD in %s: %w", repoDir, err)
+	}
+	head := strings.TrimSpace(string(headOut))
+
+	target := ref
+	if stack.Branch != "" {
+		branchOut, err := exec.Command("git", "-C", repoDir, "rev-parse", "--abbrev-ref", "HEAD").Output()
+		if err == nil && strings.TrimSpace(string(branchOut)) == ref {
+			return nil
+		}
+	}
+
+	refOut, err := exec.Command("git", "-C", repoDir, "rev-parse", target).Output()
+	if err != nil {
+		return fmt.Errorf("resolving ref %q in %s: %w", target, repoDir, err)
+	}
+	if strings.TrimSpace(string(refOut)) == head {
+		return nil
+	}
+
+	return fmt.Errorf("local repo %s is not on %q (HEAD %s); checkout manually before running plr", repoDir, ref, head[:min(7, len(head))])
 }
 
 func checkout(repoDir string, stack *config.Stack) error {
