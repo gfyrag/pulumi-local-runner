@@ -2,6 +2,8 @@
 plr
 *.exe
 **/bin/pulumi
+# Pulumi-built per-app binary (created by `plr build` next to Pulumi.yaml)
+apps/**/pulumi
 apps/grafana/grafana
 apps/loki/loki
 apps/otlp/otlp
